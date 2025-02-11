@@ -31,13 +31,3 @@ func (bfm *BloomFilterManager) IsValid(domain string) bool {
 func (bfm *BloomFilterManager) IsRevoked(domain string) bool {
 	return bfm.revocationFilter.TestString(HashDomain(domain))
 }
-
-
-
-
-
-
-
-
-
-
