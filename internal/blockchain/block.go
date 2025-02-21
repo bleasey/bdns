@@ -3,112 +3,185 @@ package blockchain
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/ecdsa"
+	"crypto/rand"
 	"encoding/gob"
-	"encoding/hex"
 	"log"
-	"strconv"
 	"time"
+	"math/big"
 )
 
-// RegistrationRecord stores details for domain registration
-type RegistrationRecord struct {
-	TID              string
-	Timestamp        int64
-	DomainName       string
-	IP               string
-	TTL              int64
-	OwnerKey         string
-	RegistrySignature string
-}
-
-// UpdateRecord stores details for updating an existing domain record
-type UpdateRecord struct {
-	TID           string
-	Timestamp     int64
-	DomainName    string
-	IP            string
-	OwnerKey      string
-	OwnerSignature string
-}
-
-// RevocationRecord stores details for revoking a domain record
-type RevocationRecord struct {
-	TID        string
-	Timestamp  int64
-	DomainName string
-	Signature  string
-	Key        string
-}
-
-// Block represents a single block in the B-DNS blockchain
 type Block struct {
-	Index               int
-	PreviousHash        string
+	Index               int64
 	Timestamp           int64
-	SlotLeader          string
-	State               string
-	Signature           string
-	RegistrationRecords []RegistrationRecord
-	UpdateRecords       []UpdateRecord
-	RevocationRecords   []RevocationRecord
-	Hash                string
+	SlotLeader          []byte
+	Signature           []byte
+	IndexHash		   	[]byte
+	MerkleRootHash		[]byte
+	StakeData    		map[string]int	// Registry Public Key -> Stake
+	Transactions        []Transaction
+	PreviousHash        []byte
+	Hash                []byte
 }
 
-// ComputeHash generates a hash for the block
-func (b *Block) ComputeHash() string {
-	recordData := ""
-	for _, r := range b.RegistrationRecords {
-		recordData += r.TID + r.DomainName + r.IP + r.OwnerKey + r.RegistrySignature
-	}
-	for _, u := range b.UpdateRecords {
-		recordData += u.TID + u.DomainName + u.IP + u.OwnerKey + u.OwnerSignature
-	}
-	for _, rev := range b.RevocationRecords {
-		recordData += rev.TID + rev.DomainName + rev.Signature + rev.Key
-	}
-
-	data := strconv.Itoa(b.Index) + b.PreviousHash + strconv.FormatInt(b.Timestamp, 10) +
-		b.SlotLeader + b.State + b.Signature + recordData
-
-	hash := sha256.Sum256([]byte(data))
-	return hex.EncodeToString(hash[:])
-}
-
-// NewBlock creates a new block given previous block's hash and operation records
-func NewBlock(index int, previousHash string, slotLeader string, state string, signature string,
-	reg []RegistrationRecord, upd []UpdateRecord, rev []RevocationRecord) *Block {
-
+func NewBlock(index int64, slotLeader []byte, indexHash []byte, transactions []Transaction, prevHash []byte, prevStakeData map[string]int, privateKey *ecdsa.PrivateKey) *Block {
 	block := &Block{
-		Index:               index,
-		PreviousHash:        previousHash,
-		Timestamp:           time.Now().Unix(),
-		SlotLeader:          slotLeader,
-		State:               state,
-		Signature:           signature,
-		RegistrationRecords: reg,
-		UpdateRecords:       upd,
-		RevocationRecords:   rev,
+		Index:         index,
+		Timestamp:     time.Now().Unix(),
+		SlotLeader:    slotLeader,
+		IndexHash:     indexHash,
+		Transactions:  transactions,
+		PreviousHash:  prevHash,
 	}
+
+	block.MerkleRootHash = block.SetupMerkleTree()
+	block.StakeData = block.SetupStakeData(prevStakeData)
+	block.Signature = block.SignBlock(privateKey)
 	block.Hash = block.ComputeHash()
+
 	return block
 }
 
-// NewGenesisBlock creates the genesis block with initial registry list and randomness
-func NewGenesisBlock() *Block {
-	genesisBlock := &Block{
-		Index:        0,
-		PreviousHash: "",
-		Timestamp:    time.Now().Unix(),
-		SlotLeader:   "genesis_leader",
-		State:        "genesis_state",
-		Signature:    "genesis_signature",
+func (b *Block) SetupStakeData(prevStakeData map[string]int) map[string]int {
+	stakeData := make(map[string]int)
+	// Copy previous stake data
+	for key, value := range prevStakeData {
+        stakeData[key] = value
+    }
+
+	// Update stake data based on transactions
+	for _, tx := range b.Transactions {
+		if tx.Type == REGISTER {
+			stakeData[string(tx.OwnerKey)]++ // Increase stake for new domain registration
+		} else if tx.Type == REVOKE {
+			stakeData[string(tx.OwnerKey)]-- // Decrease stake for revoked domain
+		}
 	}
+
+	return stakeData
+}
+
+func (b *Block) SignBlock(privateKey *ecdsa.PrivateKey) []byte {
+	blockData := b.SerializeForSigning()
+	hash := sha256.Sum256(blockData)
+
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hash[:])
+	if err != nil {
+		log.Panic(err)
+		return nil
+	}
+
+	signature := append(r.Bytes(), s.Bytes()...)
+	return signature
+}
+
+func (b *Block) VerifyBlock(publicKey *ecdsa.PublicKey) bool {
+	blockData := b.SerializeForSigning()
+	hash := sha256.Sum256(blockData)
+
+	if len(b.Signature) < 64 {
+		return false
+	}
+
+	r := new(big.Int).SetBytes(b.Signature[:32])
+	s := new(big.Int).SetBytes(b.Signature[32:])
+
+	return ecdsa.Verify(publicKey, hash[:], r, s)
+}
+
+// Same as ComputeHash, but ommits Signature field
+func (b *Block) SerializeForSigning() []byte {
+	stakeDataBytes := []byte{}
+	for key, value := range b.StakeData {
+		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
+		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
+	}  
+
+	data := bytes.Join(
+		[][]byte{
+			IntToByteArr(b.Index),
+			IntToByteArr(b.Timestamp),
+			b.SlotLeader,
+			b.IndexHash,
+			b.MerkleRootHash,
+			stakeDataBytes,
+			b.PreviousHash,
+		},
+		[]byte{},
+	)
+
+	hash := sha256.Sum256(data)
+	return hash[:]
+}
+
+func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
+	stakeData := make(map[string]int)
+	n := len(registryKeys)
+	if n == 0 {
+		log.Panic("No registries provided for genesis block")
+	}
+
+	// Initialize stakes to zero
+	for _, key := range registryKeys {
+		stakeData[string(key)] = 0
+	}
+
+	genesisBlock := Block{
+		Index:          0,
+		Timestamp:      time.Now().Unix(),
+		SlotLeader:     []byte{},
+		Signature:      []byte{},
+		IndexHash:      []byte{},
+		MerkleRootHash: []byte{},
+		StakeData:      stakeData,
+		Transactions:   []Transaction{},
+		PreviousHash:   randomness, // Storing randomness in PreviousHash field
+		Hash:           []byte{},
+	}
+
 	genesisBlock.Hash = genesisBlock.ComputeHash()
+	
 	return genesisBlock
 }
 
-// SerializeBlock serializes a block into bytes
-func SerializeBlock(b *Block) []byte {
+func (b *Block) ComputeHash() []byte {
+	stakeDataBytes := []byte{}
+	for key, value := range b.StakeData {
+		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
+		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
+	}  
+
+	data := bytes.Join(
+		[][]byte{
+			IntToByteArr(b.Index),
+			IntToByteArr(b.Timestamp),
+			b.SlotLeader,
+			b.Signature,
+			b.IndexHash,
+			b.MerkleRootHash,
+			stakeDataBytes,
+			b.PreviousHash,
+		},
+		[]byte{},
+	)
+
+	hash := sha256.Sum256(data)
+	return hash[:]
+}
+
+// Creates a merkle tree from the block's transactions and returns the root hash
+func (b *Block) SetupMerkleTree() []byte {
+	var transactions [][]byte
+
+	for _, tx := range b.Transactions {
+		transactions = append(transactions, tx.Serialize())
+	}
+	mTree := NewMerkleTree(transactions)
+
+	return mTree.RootNode.Data
+}
+
+func (b *Block) Serialize() []byte {
 	var result bytes.Buffer
 	encoder := gob.NewEncoder(&result)
 
@@ -120,7 +193,6 @@ func SerializeBlock(b *Block) []byte {
 	return result.Bytes()
 }
 
-// DeserializeBlock deserializes a block from bytes
 func DeserializeBlock(d []byte) *Block {
 	var block Block
 

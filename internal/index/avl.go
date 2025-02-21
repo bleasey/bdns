@@ -8,11 +8,6 @@ import (
 	"crypto/sha256"
 )
 
-func HashDomain(domain string) string {
-	hash := sha256.Sum256([]byte(domain))
-	return string(hash[:])
-}
-
 type AVLTree struct {
 	root *AVLNode
 }
@@ -193,4 +188,21 @@ func max(a int, b int) int {
 		return a
 	}
 	return b
+}
+
+// Compute hash for AVL tree node
+func ComputeIndexNodeHash(node *AVLNode) []byte {
+    if node == nil {
+        return nil
+    }
+    
+    leftHash := ComputeIndexNodeHash(node.left)
+    rightHash := ComputeIndexNodeHash(node.right)
+
+    data := append([]byte(node.key+node.value), leftHash...)
+    data = append(data, rightHash...)
+
+    hash := sha256.Sum256(data)
+    
+    return hash[:]
 }
