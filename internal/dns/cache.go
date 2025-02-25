@@ -17,7 +17,7 @@ type cacheEntry struct {
 }
 
 // Get retrieves a domain from the cache
-func Get(domain string) (string, bool) {
+func GetFromCache(domain string) (string, bool) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 
@@ -30,7 +30,7 @@ func Get(domain string) (string, bool) {
 }
 
 // Set stores a domain in the cache with a default TTL of 300 seconds
-func Set(domain, ip string) {
+func SetToCache(domain, ip string) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 

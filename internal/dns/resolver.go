@@ -2,17 +2,16 @@ package dns
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strings"
-	"bdns/blockchain"
-	"bdns/dns/cache"
+
+	"github.com/bleasey/bdns/internal/blockchain"
 )
 
 // ResolveDomain queries the BDNS blockchain for a domain
 func ResolveDomain(domain string) (string, error) {
 	// Check local cache first
-	if ip, found := cache.Get(domain); found {
+	if ip, found := GetFromCache(domain); found {
 		return ip, nil
 	}
 
@@ -24,7 +23,7 @@ func ResolveDomain(domain string) (string, error) {
 		}
 
 		// Cache the resolved domain for faster lookups
-		cache.Set(domain, record.IP)
+		SetToCache(domain, record.IP)
 		return record.IP, nil
 	}
 
