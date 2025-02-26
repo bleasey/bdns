@@ -3,8 +3,12 @@ package blockchain
 import (
 	"bytes"
 	"encoding/binary"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"math/big"
 	"log"
 	"os"
+	"errors"
 )
 
 // Converts an int64 to a byte array
@@ -24,4 +28,28 @@ func dbExists(dbFile string) bool {
 	}
 
 	return true
+}
+
+func BytesToPublicKey(publicKeyBytes []byte) (*ecdsa.PublicKey, error) {
+	if len(publicKeyBytes) != 64 {
+		return nil, errors.New("invalid public key length")
+	}
+
+	curve := elliptic.P256()
+	x := new(big.Int).SetBytes(publicKeyBytes[:32])
+	y := new(big.Int).SetBytes(publicKeyBytes[32:])
+
+	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+}
+
+func areStakesEqual(m1, m2 map[string]int) bool {
+    if len(m1) != len(m2) {
+        return false
+    }
+    for k, v := range m1 {
+        if v2, exists := m2[k]; !exists || v2 != v {
+            return false
+        }
+    }
+    return true
 }

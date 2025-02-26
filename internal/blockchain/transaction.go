@@ -46,7 +46,12 @@ func SignTransaction(privateKey *ecdsa.PrivateKey, tx *Transaction) []byte {
 	return signature
 }
 
-func VerifyTransaction(publicKey *ecdsa.PublicKey, tx *Transaction) bool {
+func VerifyTransaction(publicKeyBytes []byte, tx *Transaction) bool {
+	publicKey, err := BytesToPublicKey(publicKeyBytes)
+	if err != nil {
+		return false // Invalid public key format
+	}
+
 	// Serialize and hash the transaction data
 	txData := tx.SerializeForSigning()
 	hash := sha256.Sum256(txData)
