@@ -1,12 +1,9 @@
 package main
 
 import (
-	"fmt"
-	// "github.com/bleasey/bdns/internal/blockchain"
+	"github.com/bleasey/bdns/sims"
 )
 
 func main() {
-	fmt.Println("Hello, World!")
-	// genesisBlock := blockchain.NewGenesisBlock()
-	// fmt.Println(genesisBlock)
+	sims.SimpleSim1() // Runs a simple bdns simulation with 4 peers
 }

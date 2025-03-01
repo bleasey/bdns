@@ -1,18 +1,21 @@
-// In the index tree created the key is the hash(domain name) 
-// and the value is IP address
+// In the index tree created the key is the hash(domain name)
+// and the value is corresponding blockchain transaction
 
 package index
 
 import (
-	"fmt"
 	"crypto/sha256"
+	"fmt"
+	"strconv"
+
+	"github.com/bleasey/bdns/internal/blockchain"
 )
 
 type AVLTree struct {
 	root *AVLNode
 }
 
-func (t *AVLTree) Add(key string, value string) {
+func (t *AVLTree) Add(key string, value *blockchain.Transaction) {
 	t.root = t.root.add(key, value)
 }
 
@@ -20,9 +23,9 @@ func (t *AVLTree) Remove(key string) {
 	t.root = t.root.remove(key)
 }
 
-func (t *AVLTree) Update(oldKey string, newKey string, newValue string) {
-	t.root = t.root.remove(oldKey)
-	t.root = t.root.add(newKey, newValue)
+func (t *AVLTree) Update(key string, newValue *blockchain.Transaction) {
+	t.root = t.root.remove(key)
+	t.root = t.root.add(key, newValue)
 }
 
 func (t *AVLTree) Search(key string) (node *AVLNode) {
@@ -36,14 +39,14 @@ func (t *AVLTree) DisplayInOrder() {
 // AVLNode structure
 type AVLNode struct {
 	key   	string
-	value 	string
+	value 	*blockchain.Transaction
 	height 	int
 	left   *AVLNode
 	right  *AVLNode
 }
 
 // Adds a new node
-func (n *AVLNode) add(key string, value string) *AVLNode {
+func (n *AVLNode) add(key string, value *blockchain.Transaction) *AVLNode {
 	if n == nil {
 		return &AVLNode{key, value, 1, nil, nil}
 	}
@@ -198,8 +201,7 @@ func ComputeIndexNodeHash(node *AVLNode) []byte {
     
     leftHash := ComputeIndexNodeHash(node.left)
     rightHash := ComputeIndexNodeHash(node.right)
-
-    data := append([]byte(node.key+node.value), leftHash...)
+	data := append([]byte(node.key+strconv.Itoa(node.value.TID)), leftHash...)
     data = append(data, rightHash...)
 
     hash := sha256.Sum256(data)
