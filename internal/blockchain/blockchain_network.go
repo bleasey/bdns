@@ -1,10 +1,10 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/gob"
 	"log"
 	"net"
-	"bytes"
 	"sync"
 
 	"github.com/boltdb/bolt"
@@ -79,7 +79,7 @@ func (bc *Blockchain) IsValidChain(newBlocks []*Block) bool {
 // Replace swaps the blockchain with the new valid one.
 func (bc *Blockchain) replace(newBlocks []*Block) {
 	db := bc.db
-	db.Update(func(tx *bolt.Tx) error {
+	err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("blocks"))
 		if b == nil {
 			return nil
@@ -112,6 +112,9 @@ func (bc *Blockchain) replace(newBlocks []*Block) {
 		bc.tip = newBlocks[len(newBlocks)-1].Hash
 		return nil
 	})
+	if err != nil {
+		log.Printf("Error updating the block: %+v", bc)
+	}
 }
 
 // Returns the length of the current blockchain.

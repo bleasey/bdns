@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-
 	// "github.com/bleasey/bdns/internal/blockchain"
 )
 

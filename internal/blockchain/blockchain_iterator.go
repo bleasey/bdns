@@ -7,6 +7,7 @@ import (
 )
 
 // BlockchainIterator is used to iterate over blockchain blocks
+// revive:disable-next-line
 type BlockchainIterator struct {
 	currentHash []byte
 	db          *bolt.DB

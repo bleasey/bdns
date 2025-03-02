@@ -6,17 +6,17 @@ import (
 	"github.com/bleasey/bdns/internal/blockchain"
 )
 
-
+// revive:disable-next-line
 type IndexManager struct {
-	tree 			*AVLTree
-	filter 			*BloomFilterManager
-	currentIndex	int64
+	tree         *AVLTree
+	filter       *BloomFilterManager
+	currentIndex int64
 }
 
 func NewIndexManager() *IndexManager {
 	return &IndexManager{
-		tree: &AVLTree{nil},
-		filter: InitFilter(),
+		tree:         &AVLTree{nil},
+		filter:       InitFilter(),
 		currentIndex: 0, // Corresponds to genesis block
 	}
 }
@@ -26,12 +26,12 @@ func (im *IndexManager) GetIP(domain string) *blockchain.Transaction {
 	if !im.filter.IsValid(domain) {
 		return nil
 	}
-	
+
 	targetNode := im.tree.Search(HashDomain(domain))
 	if targetNode == nil {
 		return nil
 	}
-	
+
 	return targetNode.value
 }
 

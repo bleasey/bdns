@@ -2,13 +2,13 @@ package blockchain
 
 import (
 	"bytes"
-	"encoding/binary"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"math/big"
-	"log"
-	"os"
+	"encoding/binary"
 	"errors"
+	"log"
+	"math/big"
+	"os"
 )
 
 // Converts an int64 to a byte array
@@ -43,13 +43,13 @@ func BytesToPublicKey(publicKeyBytes []byte) (*ecdsa.PublicKey, error) {
 }
 
 func areStakesEqual(m1, m2 map[string]int) bool {
-    if len(m1) != len(m2) {
-        return false
-    }
-    for k, v := range m1 {
-        if v2, exists := m2[k]; !exists || v2 != v {
-            return false
-        }
-    }
-    return true
+	if len(m1) != len(m2) {
+		return false
+	}
+	for k, v := range m1 {
+		if v2, exists := m2[k]; !exists || v2 != v {
+			return false
+		}
+	}
+	return true
 }

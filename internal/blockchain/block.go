@@ -2,13 +2,13 @@ package blockchain
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/gob"
 	"log"
-	"time"
 	"math/big"
+	"time"
 )
 
 type Block struct {
@@ -222,7 +222,7 @@ func (b *Block) ValidateBlock(newBlock Block, oldBlock Block, slotLeader []byte,
 	if !bytes.Equal(newBlock.SlotLeader, slotLeader) {
 		return false
 	}
-	
+
 	if !newBlock.VerifyBlock(leaderPubKey) {
 		return false
 	}
@@ -246,7 +246,7 @@ func (b *Block) ValidateBlock(newBlock Block, oldBlock Block, slotLeader []byte,
 	return true
 }
 
-func (b *Block) ValidateTransactions () bool {
+func (b *Block) ValidateTransactions() bool {
 	for _, tx := range b.Transactions {
 		if !VerifyTransaction(tx.OwnerKey, &tx) {
 			return false

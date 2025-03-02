@@ -21,3 +21,9 @@ Before running the project, ensure all dependencies are installed by executing:
    rm .\chaindata\*
    make
    ```
+
+### Run Linting
+```sh
+golangci-lint run  # to identify all the issues
+golangci-lint run --fix # to automatically fix the fixable issues
+```

@@ -6,9 +6,9 @@ package index
 import (
 	"crypto/sha256"
 	"fmt"
-	"strconv"
-
 	"github.com/bleasey/bdns/internal/blockchain"
+	"math"
+	"strconv"
 )
 
 type AVLTree struct {
@@ -38,9 +38,9 @@ func (t *AVLTree) DisplayInOrder() {
 
 // AVLNode structure
 type AVLNode struct {
-	key   	string
-	value 	*blockchain.Transaction
-	height 	int
+	key    string
+	value  *blockchain.Transaction
+	height int
 	left   *AVLNode
 	right  *AVLNode
 }
@@ -91,7 +91,6 @@ func (n *AVLNode) remove(key string) *AVLNode {
 			n = nil
 			return n
 		}
-
 	}
 	return n.rebalanceTree()
 }
@@ -105,9 +104,8 @@ func (n *AVLNode) search(key string) *AVLNode {
 		return n.left.search(key)
 	} else if key > n.key {
 		return n.right.search(key)
-	} else {
-		return n
 	}
+	return n
 }
 
 // Displays nodes left-depth first (used for debugging)
@@ -129,7 +127,7 @@ func (n *AVLNode) getHeight() int {
 }
 
 func (n *AVLNode) recalculateHeight() {
-	n.height = 1 + max(n.left.getHeight(), n.right.getHeight())
+	n.height = 1 + int(math.Max(float64(n.left.getHeight()), float64(n.right.getHeight())))
 }
 
 // Checks if node is balanced and rebalance
@@ -181,30 +179,22 @@ func (n *AVLNode) rotateRight() *AVLNode {
 func (n *AVLNode) findSmallest() *AVLNode {
 	if n.left != nil {
 		return n.left.findSmallest()
-	} else {
-		return n
 	}
-}
-
-func max(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return n
 }
 
 // Compute hash for AVL tree node
 func ComputeIndexNodeHash(node *AVLNode) []byte {
-    if node == nil {
-        return nil
-    }
-    
-    leftHash := ComputeIndexNodeHash(node.left)
-    rightHash := ComputeIndexNodeHash(node.right)
-	data := append([]byte(node.key+strconv.Itoa(node.value.TID)), leftHash...)
-    data = append(data, rightHash...)
+	if node == nil {
+		return nil
+	}
 
-    hash := sha256.Sum256(data)
-    
-    return hash[:]
+	leftHash := ComputeIndexNodeHash(node.left)
+	rightHash := ComputeIndexNodeHash(node.right)
+	data := append([]byte(node.key+strconv.Itoa(node.value.TID)), leftHash...)
+	data = append(data, rightHash...)
+
+	hash := sha256.Sum256(data)
+
+	return hash[:]
 }

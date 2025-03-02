@@ -5,10 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
-	"math/big"
-	"encoding/gob"
 	"encoding/binary"
+	"encoding/gob"
 	"log"
+	"math/big"
 	"time"
 )
 
@@ -32,7 +32,7 @@ type Transaction struct {
 }
 
 func NewTransaction(txType TransactionType, domainName, ip string, ttl int64, ownerKey []byte,
-					privateKey *ecdsa.PrivateKey, txPool map[int]*Transaction) *Transaction {
+	privateKey *ecdsa.PrivateKey, txPool map[int]*Transaction) *Transaction {
 	tx := Transaction{
 		TID:        GenerateRandomTxID(txPool),
 		Type:       txType,
@@ -94,7 +94,7 @@ func (tx *Transaction) SerializeForSigning() []byte {
 	txData = append(txData, []byte(tx.DomainName)...)
 	txData = append(txData, []byte(tx.IP)...)
 	txData = append(txData, IntToByteArr(tx.TTL)...)
-	
+
 	return txData
 }
 

@@ -16,7 +16,7 @@ func InitFilter() *BloomFilterManager {
 	}
 }
 
-func (bfm * BloomFilterManager) AddToValidList(validDomain string) {
+func (bfm *BloomFilterManager) AddToValidList(validDomain string) {
 	bfm.validFilter.AddString(HashDomain(validDomain))
 }
 
