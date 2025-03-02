@@ -21,8 +21,13 @@ func SimpleSim1() {
 	// Create and start nodes
 	nodes := make([]*network.Node, numNodes)
 	registryKeys := make([][]byte, numNodes)
-	nodeAddresses := []string{"localhost:5001", "localhost:5002", "localhost:5003", "localhost:5004"}
-
+	
+	nodeAddresses := []string{}
+	for i := 0; i < 4; i++ {
+		nodeAddress := fmt.Sprintf("localhost:500%d", i)
+		nodeAddresses = append(nodeAddresses, nodeAddress)
+	}
+	
 	for i := 0; i < numNodes; i++ {
 		nodes[i] = network.NewNode(nodeAddresses[i])
 		registryKeys[i] = nodes[i].KeyPair.PublicKey
