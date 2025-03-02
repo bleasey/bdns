@@ -1,7 +1,6 @@
 package blockchain
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -10,7 +9,7 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-const dbFile = "blockchain_%s.db"
+const dbFile = "chaindata/blockchain_%s.db"
 const blocksBucket = "blocks"
 
 // Blockchain implements interactions with a DB
@@ -66,10 +65,10 @@ func CreateBlockchain(chainID string, registryKeys [][]byte, randomness []byte) 
 	return &bc
 }
 
-// NewBlockchain creates a new Blockchain with genesis Block
-func NewBlockchain(chainID string) *Blockchain {
+// OpenBlockchain opens an existing blockchain DB
+func OpenBlockchain(chainID string) *Blockchain {
 	dbFile := fmt.Sprintf(dbFile, chainID)
-	if dbExists(dbFile) == false {
+	if !dbExists(dbFile) {
 		fmt.Println("No existing blockchain found. Create one first.")
 		os.Exit(1)
 	}
@@ -132,14 +131,14 @@ func (bc *Blockchain) AddBlock(block *Block) {
 }
 
 // FindTransaction finds a transaction by its ID
-func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
+func (bc *Blockchain) FindTransaction(tid int) (Transaction, error) {
 	bci := bc.Iterator()
 
 	for {
 		block := bci.Next()
 
 		for _, tx := range block.Transactions {
-			if bytes.Compare(tx.TID, ID) == 0 {
+			if tx.TID == tid {
 				return tx, nil
 			}
 		}
@@ -188,7 +187,7 @@ func (bc *Blockchain) GetBlock(blockHash []byte) (Block, error) {
 		blockData := b.Get(blockHash)
 
 		if blockData == nil {
-			return errors.New("Block is not found.")
+			return errors.New("Block is not found")
 		}
 
 		block = *DeserializeBlock(blockData)
@@ -218,4 +217,22 @@ func (bc *Blockchain) GetBlockHashes() [][]byte {
 	}
 
 	return blocks
+}
+
+func (bc *Blockchain) GetLatestBlock() *Block {
+	var block *Block
+
+	err := bc.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		lastHash := b.Get([]byte("l"))
+		blockData := b.Get(lastHash)
+		block = DeserializeBlock(blockData)
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return block
 }

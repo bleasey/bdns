@@ -1,6 +1,4 @@
-package dns
-
-import "time"
+package network
 
 // RecordType defines supported BDNS record types
 type RecordType string
@@ -22,5 +20,19 @@ type DNSRecord struct {
 	Port       int         `json:"port"`     // Used for SRV records
 	OwnerKey   string      `json:"ownerKey"` // Owner's public key
 	Signature  string      `json:"signature"`// Signature to verify authenticity
-	Timestamp  time.Time   `json:"timestamp"`// Record creation time
+	Timestamp  int64   		`json:"timestamp"`// Record creation time
+}
+
+type BDNSRequest struct {
+	DomainName string
+	// RecordType RecordType
+}
+
+type BDNSResponse struct {
+	Timestamp int64
+	DomainName string
+	IP 	string
+	TTL int64
+	OwnerKey []byte
+	Signature []byte
 }

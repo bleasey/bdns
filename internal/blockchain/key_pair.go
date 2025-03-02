@@ -19,9 +19,9 @@ type KeyPair struct {
 
 func NewKeyPair() *KeyPair {
 	private, public := generateKeyPair()
-	wallet := KeyPair{private, public}
+	kp := KeyPair{private, public}
 
-	return &wallet
+	return &kp
 }
 
 func (kp KeyPair) GetAddress() []byte {

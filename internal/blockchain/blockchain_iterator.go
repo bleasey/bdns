@@ -28,7 +28,7 @@ func (i *BlockchainIterator) Next() *Block {
 		log.Panic(err)
 	}
 
-	i.currentHash = block.PreviousHash
+	i.currentHash = block.PrevHash
 
 	return block
 }

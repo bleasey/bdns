@@ -10,7 +10,14 @@ Before running the project, ensure all dependencies are installed by executing:
    go mod tidy
    ```
 
-### Run 
+### Run Program
    ```sh
    go run main.go
+   ```
+
+### Run Simulation
+   ```sh
+   mkdir chaindata
+   rm .\chaindata\*
+   make
    ```

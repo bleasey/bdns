@@ -2,6 +2,8 @@ package index
 
 import (
 	"crypto/sha256"
+
+	"github.com/bleasey/bdns/internal/blockchain"
 )
 
 
@@ -19,15 +21,15 @@ func NewIndexManager() *IndexManager {
 	}
 }
 
-func (im *IndexManager) GetIP(domain string) string {
+func (im *IndexManager) GetIP(domain string) *blockchain.Transaction {
 	// Check if the domain is valid
 	if !im.filter.IsValid(domain) {
-		return ""
+		return nil
 	}
 	
 	targetNode := im.tree.Search(HashDomain(domain))
 	if targetNode == nil {
-		return ""
+		return nil
 	}
 	
 	return targetNode.value
@@ -37,13 +39,13 @@ func (im *IndexManager) GetIndexHash() []byte {
 	return ComputeIndexNodeHash(im.tree.root)
 }
 
-func (im *IndexManager) Add(domain string, ip string) {
-	im.tree.Add(HashDomain(domain), ip)
+func (im *IndexManager) Add(domain string, tx *blockchain.Transaction) {
+	im.tree.Add(HashDomain(domain), tx)
 	im.filter.AddToValidList(domain)
 }
 
-func (im *IndexManager) Update(oldDomain string, newDomain string, ip string) {
-	im.tree.Update(HashDomain(oldDomain), HashDomain(newDomain), ip)
+func (im *IndexManager) Update(domain string, tx *blockchain.Transaction) {
+	im.tree.Update(HashDomain(domain), tx)
 }
 
 func (im *IndexManager) Remove(domain string) {

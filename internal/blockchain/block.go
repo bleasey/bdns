@@ -12,26 +12,26 @@ import (
 )
 
 type Block struct {
-	Index               int64
-	Timestamp           int64
-	SlotLeader          []byte
-	Signature           []byte
-	IndexHash		   	[]byte
-	MerkleRootHash		[]byte
-	StakeData    		map[string]int	// Registry Public Key -> Stake
-	Transactions        []Transaction
-	PreviousHash        []byte
-	Hash                []byte
+	Index          int64
+	Timestamp      int64
+	SlotLeader     []byte
+	Signature      []byte
+	IndexHash      []byte
+	MerkleRootHash []byte
+	StakeData      map[string]int // Registry Public Key -> Stake
+	Transactions   []Transaction
+	PrevHash       []byte
+	Hash           []byte
 }
 
 func NewBlock(index int64, slotLeader []byte, indexHash []byte, transactions []Transaction, prevHash []byte, prevStakeData map[string]int, privateKey *ecdsa.PrivateKey) *Block {
 	block := &Block{
-		Index:         index,
-		Timestamp:     time.Now().Unix(),
-		SlotLeader:    slotLeader,
-		IndexHash:     indexHash,
-		Transactions:  transactions,
-		PreviousHash:  prevHash,
+		Index:        index,
+		Timestamp:    time.Now().Unix(),
+		SlotLeader:   slotLeader,
+		IndexHash:    indexHash,
+		Transactions: transactions,
+		PrevHash:     prevHash,
 	}
 
 	block.MerkleRootHash = block.SetupMerkleTree()
@@ -46,8 +46,8 @@ func (b *Block) SetupStakeData(prevStakeData map[string]int) map[string]int {
 	stakeData := make(map[string]int)
 	// Copy previous stake data
 	for key, value := range prevStakeData {
-        stakeData[key] = value
-    }
+		stakeData[key] = value
+	}
 
 	// Update stake data based on transactions
 	for _, tx := range b.Transactions {
@@ -75,7 +75,12 @@ func (b *Block) SignBlock(privateKey *ecdsa.PrivateKey) []byte {
 	return signature
 }
 
-func (b *Block) VerifyBlock(publicKey *ecdsa.PublicKey) bool {
+func (b *Block) VerifyBlock(publicKeyBytes []byte) bool {
+	publicKey, err := BytesToPublicKey(publicKeyBytes)
+	if err != nil {
+		return false // Invalid public key format
+	}
+
 	blockData := b.SerializeForSigning()
 	hash := sha256.Sum256(blockData)
 
@@ -95,7 +100,7 @@ func (b *Block) SerializeForSigning() []byte {
 	for key, value := range b.StakeData {
 		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
 		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
-	}  
+	}
 
 	data := bytes.Join(
 		[][]byte{
@@ -105,7 +110,7 @@ func (b *Block) SerializeForSigning() []byte {
 			b.IndexHash,
 			b.MerkleRootHash,
 			stakeDataBytes,
-			b.PreviousHash,
+			b.PrevHash,
 		},
 		[]byte{},
 	)
@@ -135,12 +140,12 @@ func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
 		MerkleRootHash: []byte{},
 		StakeData:      stakeData,
 		Transactions:   []Transaction{},
-		PreviousHash:   randomness, // Storing randomness in PreviousHash field
+		PrevHash:       randomness, // Storing randomness in PrevHash field
 		Hash:           []byte{},
 	}
 
 	genesisBlock.Hash = genesisBlock.ComputeHash()
-	
+
 	return genesisBlock
 }
 
@@ -149,7 +154,7 @@ func (b *Block) ComputeHash() []byte {
 	for key, value := range b.StakeData {
 		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
 		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
-	}  
+	}
 
 	data := bytes.Join(
 		[][]byte{
@@ -160,7 +165,7 @@ func (b *Block) ComputeHash() []byte {
 			b.IndexHash,
 			b.MerkleRootHash,
 			stakeDataBytes,
-			b.PreviousHash,
+			b.PrevHash,
 		},
 		[]byte{},
 	)
@@ -203,4 +208,49 @@ func DeserializeBlock(d []byte) *Block {
 	}
 
 	return &block
+}
+
+func (b *Block) ValidateBlock(newBlock Block, oldBlock Block, slotLeader []byte, leaderPubKey []byte) bool {
+	if oldBlock.Index+1 != newBlock.Index {
+		return false
+	}
+
+	if !bytes.Equal(oldBlock.Hash, newBlock.PrevHash) {
+		return false
+	}
+
+	if !bytes.Equal(newBlock.SlotLeader, slotLeader) {
+		return false
+	}
+	
+	if !newBlock.VerifyBlock(leaderPubKey) {
+		return false
+	}
+
+	if !bytes.Equal(newBlock.MerkleRootHash, newBlock.SetupMerkleTree()) {
+		return false
+	}
+
+	if !areStakesEqual(newBlock.StakeData, newBlock.SetupStakeData(oldBlock.StakeData)) {
+		return false
+	}
+
+	if !newBlock.ValidateTransactions() {
+		return false
+	}
+
+	if !bytes.Equal(newBlock.Hash, newBlock.ComputeHash()) {
+		return false
+	}
+
+	return true
+}
+
+func (b *Block) ValidateTransactions () bool {
+	for _, tx := range b.Transactions {
+		if !VerifyTransaction(tx.OwnerKey, &tx) {
+			return false
+		}
+	}
+	return true
 }

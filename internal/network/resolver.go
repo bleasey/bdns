@@ -1,11 +1,11 @@
-package dns
+package network
 
 import (
 	"fmt"
 	"net"
 	"strings"
 
-	"github.com/bleasey/bdns/internal/blockchain"
+	// "github.com/bleasey/bdns/internal/blockchain"
 )
 
 // ResolveDomain queries the BDNS blockchain for a domain
@@ -17,14 +17,14 @@ func ResolveDomain(domain string) (string, error) {
 
 	// Query blockchain if it’s a BDNS domain
 	if strings.HasSuffix(domain, ".bdns.") {
-		record, found := blockchain.BDNSChain.GetDomainRecord(domain)
+		record, found := "127.0.0.1:52670", true // Query blockchain for domain
 		if !found {
 			return "", fmt.Errorf("domain %s not found in BDNS", domain)
 		}
 
 		// Cache the resolved domain for faster lookups
-		SetToCache(domain, record.IP)
-		return record.IP, nil
+		SetToCache(domain, record)
+		return record, nil
 	}
 
 	// Default to traditional DNS resolution
