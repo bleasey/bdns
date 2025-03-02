@@ -36,11 +36,11 @@ func (kp KeyPair) GetAddress() []byte {
 	return address
 }
 
-func HashPubKey(pubKey []byte) []byte { 
-    publicSHA256 := sha256.Sum256(pubKey)
-    secondSHA256 := sha256.Sum256(publicSHA256[:])
+func HashPubKey(pubKey []byte) []byte {
+	publicSHA256 := sha256.Sum256(pubKey)
+	secondSHA256 := sha256.Sum256(publicSHA256[:])
 
-    return secondSHA256[:20]
+	return secondSHA256[:20]
 }
 
 func ValidateAddress(address string) bool {

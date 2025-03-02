@@ -3,10 +3,9 @@ package blockchain
 import (
 	"errors"
 	"fmt"
+	"github.com/boltdb/bolt"
 	"log"
 	"os"
-
-	"github.com/boltdb/bolt"
 )
 
 const dbFile = "chaindata/blockchain_%s.db"
@@ -98,9 +97,9 @@ func OpenBlockchain(chainID string) *Blockchain {
 func (bc *Blockchain) AddBlock(block *Block) {
 	err := bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
-		blockInDb := b.Get(block.Hash)
+		blockInDB := b.Get(block.Hash)
 
-		if blockInDb != nil {
+		if blockInDB != nil {
 			return nil
 		}
 

@@ -12,8 +12,8 @@ var (
 
 // cacheEntry holds DNS records with TTL
 type cacheEntry struct {
-	ip       string
-	expiry   time.Time
+	ip     string
+	expiry time.Time
 }
 
 // Get retrieves a domain from the cache

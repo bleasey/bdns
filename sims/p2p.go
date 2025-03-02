@@ -17,7 +17,7 @@ func SimpleSim1() {
 	const epochInterval = 10
 	const seed = 0
 	var wg sync.WaitGroup
-	
+
 	// Create and start nodes
 	nodes := make([]*network.Node, numNodes)
 	registryKeys := make([][]byte, numNodes)
@@ -64,7 +64,7 @@ func SimpleSim1() {
 	// Periodic querying simulation
 	wg.Add(numNodes)
 	for i, node := range nodes {
-		go func(n *network.Node, id int) {
+		go func(_ *network.Node, id int) {
 			defer wg.Done()
 			for j := 0; j < 1; j++ {
 				// Randomly pick a domain to query
