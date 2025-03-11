@@ -49,42 +49,52 @@ func NewTransaction(txType TransactionType, domainName, ip string, ttl int64, ow
 }
 
 func SignTransaction(privateKey *ecdsa.PrivateKey, tx *Transaction) []byte {
-	// Serialize and hash the transaction data
 	txData := tx.SerializeForSigning()
 	hash := sha256.Sum256(txData)
 
-	// Sign the hash
 	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hash[:])
 	if err != nil {
-		log.Panic(err)
+		log.Panic("Failed to sign transaction:", err)
 		return nil
 	}
 
-	// Serialize r and s into a signature
-	signature := append(r.Bytes(), s.Bytes()...)
+	// Ensure r and s are exactly 32 bytes each
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+
+	// Pad r and s to fixed 32-byte size
+	rPadded := make([]byte, 32)
+	sPadded := make([]byte, 32)
+	copy(rPadded[32-len(rBytes):], rBytes)
+	copy(sPadded[32-len(sBytes):], sBytes)
+
+	// Concatenate r and s
+	signature := append(rPadded, sPadded...)
+	tx.Signature = signature
+
 	return signature
 }
 
 func VerifyTransaction(publicKeyBytes []byte, tx *Transaction) bool {
 	publicKey, err := BytesToPublicKey(publicKeyBytes)
 	if err != nil {
-		return false // Invalid public key format
+		log.Println("Invalid public key format")
+		return false
 	}
 
-	// Serialize and hash the transaction data
 	txData := tx.SerializeForSigning()
 	hash := sha256.Sum256(txData)
 
-	// Extract r and s from the signature
-	signature := tx.Signature
-	if len(signature) < 64 {
-		return false // Invalid signature length
+	// Ensure signature length is correct
+	if len(tx.Signature) != 64 {
+		log.Println("Invalid signature length")
+		return false
 	}
 
-	r := new(big.Int).SetBytes(signature[:32])
-	s := new(big.Int).SetBytes(signature[32:])
+	// Extract r and s from the signature
+	r := new(big.Int).SetBytes(tx.Signature[:32])
+	s := new(big.Int).SetBytes(tx.Signature[32:])
 
-	// Verify the signature
 	return ecdsa.Verify(publicKey, hash[:], r, s)
 }
 

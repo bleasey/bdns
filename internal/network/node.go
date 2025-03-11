@@ -199,3 +199,64 @@ func (n *Node) ConnectToPeer(address string) {
 
 	n.AddPeer(address, conn)
 }
+
+// Get peers connected to each other for a simulation
+func InitializeNodesAsPeers(numNodes int, epochInterval int, seed int) ([]*Node, []string, [][]byte) {
+	// Create and start nodes
+	nodes := make([]*Node, numNodes)
+	registryKeys := make([][]byte, numNodes)
+
+	// Set node addresses and keys
+	nodeAddresses := []string{}
+	for i := 0; i < numNodes; i++ {
+		nodeAddress := fmt.Sprintf("localhost:500%d", i)
+		nodeAddresses = append(nodeAddresses, nodeAddress)
+		nodes[i] = NewNode(nodeAddress)
+		registryKeys[i] = nodes[i].KeyPair.PublicKey
+	}
+
+	currTimestamp := time.Now().Unix()
+
+	// Initialize nodes given registryKeys and params
+	for i := 0; i < numNodes; i++ {
+		nodes[i].InitializeNodeAsync(strconv.Itoa(i), registryKeys, []byte("randomness"), currTimestamp, int64(epochInterval), int64(seed))
+	}
+
+	time.Sleep(2 * time.Second) // Let the network stabilize
+
+	// Connect nodes to each other
+	for i, node := range nodes {
+		for j, addr := range nodeAddresses {
+			if i != j {
+				node.ConnectToPeer(addr)
+			}
+		}
+	}
+
+	fmt.Printf("Nodes initialized as peers, listening on localhost:5000 to localhost:500%d.\n", numNodes-1)
+	fmt.Println("- - - - - - - - - - - -")
+
+	return nodes, nodeAddresses, registryKeys
+}
+
+func NodesCleanup(nodes []*Node) {
+	fmt.Println("- - - - - - - - - - - -")
+	fmt.Println("Cleaning up nodes....")
+
+	// Close all databases
+	for _, node := range nodes {
+		if err := node.Blockchain.CloseDB(); err != nil {
+			log.Printf("Failed to close database for node %s: %v", node.Address, err)
+		}
+	}
+
+	// Wait briefly to ensure file handles are released
+	time.Sleep(2 * time.Second)
+
+	// Delete chaindata directory
+	dir := "chaindata"
+	if err := os.RemoveAll(dir); err != nil {
+		log.Fatalf("Failed to clear directory %s: %v", dir, err)
+	}
+	fmt.Println("Simulation completed.")
+}

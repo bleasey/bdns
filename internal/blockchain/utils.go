@@ -3,12 +3,12 @@ package blockchain
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/x509"
 	"encoding/binary"
-	"errors"
 	"log"
-	"math/big"
 	"os"
+	"errors"
+	"fmt"
 )
 
 // Converts an int64 to a byte array
@@ -30,16 +30,18 @@ func dbExists(dbFile string) bool {
 	return true
 }
 
-func BytesToPublicKey(publicKeyBytes []byte) (*ecdsa.PublicKey, error) {
-	if len(publicKeyBytes) != 64 {
-		return nil, errors.New("invalid public key length")
+func BytesToPublicKey(pubKeyBytes []byte) (*ecdsa.PublicKey, error) {
+	pubKeyInterface, err := x509.ParsePKIXPublicKey(pubKeyBytes)
+	if err != nil {
+		return nil, errors.New("invalid public key format")
 	}
 
-	curve := elliptic.P256()
-	x := new(big.Int).SetBytes(publicKeyBytes[:32])
-	y := new(big.Int).SetBytes(publicKeyBytes[32:])
+	pubKey, ok := pubKeyInterface.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, errors.New("invalid ECDSA public key")
+	}
 
-	return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+	return pubKey, nil
 }
 
 func areStakesEqual(m1, m2 map[string]int) bool {
@@ -52,4 +54,36 @@ func areStakesEqual(m1, m2 map[string]int) bool {
 		}
 	}
 	return true
+}
+
+func (t *Transaction) PrintTx() {
+	fmt.Printf("\nTID: %x\n", t.TID)
+	fmt.Printf("Type: %d\n", t.Type)
+	fmt.Printf("Timestamp: %d\n", t.Timestamp)
+	fmt.Printf("DomainName: %s\n", t.DomainName)
+	fmt.Printf("IP: %s\n", t.IP)
+	fmt.Printf("TTL: %d\n", t.TTL)
+	fmt.Printf("OwnerKey: %s\n", t.OwnerKey)
+	fmt.Printf("Signature: %d\n\n", t.Signature)
+}
+
+func (b *Block) PrintBlock() {
+	fmt.Println("- - - - - - Printing Block - - - - - -")
+	fmt.Printf("Index: %d\n", b.Index)
+	fmt.Printf("Timestamp: %d\n", b.Timestamp)
+	fmt.Printf("SlotLeader: %s\n", b.SlotLeader)
+	fmt.Printf("Signature: %s\n", b.Signature)
+	fmt.Printf("IndexHash: %x\n", b.IndexHash)
+	fmt.Printf("MerkleRootHash: %x\n", b.MerkleRootHash)
+	fmt.Println("StakeData:")
+	for key, value := range b.StakeData {
+		fmt.Printf("%s: %d,\t", key, value)
+	}
+	fmt.Println("Transactions:")
+	for _, tx := range b.Transactions {
+		tx.PrintTx()
+	}
+	fmt.Printf("PrevHash: %x\n", b.PrevHash)
+	fmt.Printf("Hash: %x\n", b.Hash)
+	fmt.Println("- - - - - - - - - - - - - - - - - - - -")
 }

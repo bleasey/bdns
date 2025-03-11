@@ -6,9 +6,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
+	"fmt"
 	"log"
 	"math/big"
 	"time"
+	"sort"
 )
 
 type Block struct {
@@ -67,24 +69,39 @@ func (b *Block) SignBlock(privateKey *ecdsa.PrivateKey) []byte {
 
 	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hash[:])
 	if err != nil {
-		log.Panic(err)
+		log.Panic("Failed to sign block:", err)
 		return nil
 	}
 
-	signature := append(r.Bytes(), s.Bytes()...)
+	// Ensure r and s are exactly 32 bytes each
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+
+	// ECDSA signatures are (r, s), each 32 bytes. Pad to ensure fixed size.
+	rPadded := make([]byte, 32)
+	sPadded := make([]byte, 32)
+	copy(rPadded[32-len(rBytes):], rBytes)
+	copy(sPadded[32-len(sBytes):], sBytes)
+
+	// Concatenate r and s
+	signature := append(rPadded, sPadded...)
+	b.Signature = signature
+
 	return signature
 }
 
 func (b *Block) VerifyBlock(publicKeyBytes []byte) bool {
 	publicKey, err := BytesToPublicKey(publicKeyBytes)
 	if err != nil {
-		return false // Invalid public key format
+		log.Println("Invalid public key format")
+		return false
 	}
 
 	blockData := b.SerializeForSigning()
 	hash := sha256.Sum256(blockData)
 
-	if len(b.Signature) < 64 {
+	if len(b.Signature) != 64 {
+		log.Println("Invalid signature length")
 		return false
 	}
 
@@ -96,8 +113,17 @@ func (b *Block) VerifyBlock(publicKeyBytes []byte) bool {
 
 // Same as ComputeHash, but ommits Signature field
 func (b *Block) SerializeForSigning() []byte {
+	// Extract keys from the map
+	keys := make([]string, 0, len(b.StakeData))
+	for key := range b.StakeData {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys) // Sort keys to ensure deterministic order
+
 	stakeDataBytes := []byte{}
-	for key, value := range b.StakeData {
+	for _, key := range keys {
+		value := b.StakeData[key]
 		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
 		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
 	}
@@ -119,7 +145,7 @@ func (b *Block) SerializeForSigning() []byte {
 	return hash[:]
 }
 
-func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
+func NewGenesisBlock(slotLeader []byte, privateKey *ecdsa.PrivateKey, registryKeys [][]byte, randomness []byte) *Block {
 	stakeData := make(map[string]int)
 	n := len(registryKeys)
 	if n == 0 {
@@ -134,7 +160,7 @@ func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
 	genesisBlock := Block{
 		Index:          0,
 		Timestamp:      time.Now().Unix(),
-		SlotLeader:     []byte{},
+		SlotLeader:     slotLeader,
 		Signature:      []byte{},
 		IndexHash:      []byte{},
 		MerkleRootHash: []byte{},
@@ -144,14 +170,24 @@ func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
 		Hash:           []byte{},
 	}
 
+	genesisBlock.Signature = genesisBlock.SignBlock(privateKey)
 	genesisBlock.Hash = genesisBlock.ComputeHash()
 
-	return genesisBlock
+	return &genesisBlock
 }
 
 func (b *Block) ComputeHash() []byte {
+	// Extract keys from the map
+	keys := make([]string, 0, len(b.StakeData))
+	for key := range b.StakeData {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys) // Sort keys to ensure deterministic order
+
 	stakeDataBytes := []byte{}
-	for key, value := range b.StakeData {
+	for _, key := range keys {
+		value := b.StakeData[key]
 		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
 		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
 	}
@@ -210,36 +246,83 @@ func DeserializeBlock(d []byte) *Block {
 	return &block
 }
 
-func (b *Block) ValidateBlock(newBlock Block, oldBlock Block, slotLeader []byte, leaderPubKey []byte) bool {
+func ValidateGenesisBlock(block *Block, registryKeys [][]byte, slotLeaderKey []byte) bool {
+	if block.Index != 0 {
+		fmt.Println("1")
+		return false
+	}
+
+	if !bytes.Equal(block.SlotLeader, slotLeaderKey) {
+		fmt.Println("2")
+		return false
+	}
+
+	if !block.VerifyBlock(slotLeaderKey) {
+		fmt.Println("3")
+		return false
+	}
+
+	if len(block.StakeData) != len(registryKeys) {
+		fmt.Println("4")
+		return false
+	}
+
+	for _, key := range registryKeys {
+		if block.StakeData[string(key)] != 0 {
+			fmt.Println("5")
+			return false
+		}
+	}
+
+	if len(block.Transactions) != 0 {
+		fmt.Println("6")
+		return false
+	}
+
+	return bytes.Equal(block.Hash, block.ComputeHash())
+}
+
+func ValidateBlock(newBlock *Block, oldBlock *Block, slotLeaderKey []byte) bool {
+	newBlock.PrintBlock()
+	oldBlock.PrintBlock()
+	
 	if oldBlock.Index+1 != newBlock.Index {
+		fmt.Println("1")
 		return false
 	}
 
 	if !bytes.Equal(oldBlock.Hash, newBlock.PrevHash) {
+		fmt.Println("2")
 		return false
 	}
 
-	if !bytes.Equal(newBlock.SlotLeader, slotLeader) {
+	if !bytes.Equal(newBlock.SlotLeader, slotLeaderKey) {
+		fmt.Println("3")
 		return false
 	}
 
-	if !newBlock.VerifyBlock(leaderPubKey) {
+	if !newBlock.VerifyBlock(slotLeaderKey) {
+		fmt.Println("4")
 		return false
 	}
 
 	if !bytes.Equal(newBlock.MerkleRootHash, newBlock.SetupMerkleTree()) {
+		fmt.Println("5")
 		return false
 	}
 
 	if !areStakesEqual(newBlock.StakeData, newBlock.SetupStakeData(oldBlock.StakeData)) {
+		fmt.Println("6")
 		return false
 	}
 
 	if !newBlock.ValidateTransactions() {
+		fmt.Println("7")
 		return false
 	}
 
 	if !bytes.Equal(newBlock.Hash, newBlock.ComputeHash()) {
+		fmt.Println("8")
 		return false
 	}
 
