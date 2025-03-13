@@ -5,10 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/x509"
 	"encoding/binary"
-	"log"
-	"os"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 )
 
 // Converts an int64 to a byte array

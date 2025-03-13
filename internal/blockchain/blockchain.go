@@ -18,7 +18,7 @@ type Blockchain struct {
 }
 
 // CreateBlockchain creates a new blockchain DB
-func CreateBlockchain(chainID string, registryKeys [][]byte, randomness []byte) *Blockchain {
+func CreateBlockchain(chainID string) *Blockchain {
 	dir := "chaindata"
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		log.Fatalf("Failed to create directory %s: %v", dir, err)
@@ -106,7 +106,6 @@ func (bc *Blockchain) AddBlock(block *Block) {
 		if err != nil {
 			log.Panic(err)
 		}
-
 
 		// TODO: Chain comparison before adding block
 		err = b.Put([]byte("l"), block.Hash)

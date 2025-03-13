@@ -19,18 +19,16 @@ func SimpleSim1() {
 
 	nodes, _, _ := network.InitializeNodesAsPeers(numNodes, epochInterval, seed)
 
+	fmt.Printf("Waiting for end of epoch for creation of genesis block....\n\n")
+	time.Sleep(epochInterval * time.Second) // Waiting for genesis block to be broadcasted
+
 	// Each node registers its own domains
 	for i, node := range nodes {
-		tx := blockchain.Transaction{
-			TID:        rand.Intn(1_000_000),
-			Type:       blockchain.REGISTER,
-			Timestamp:  time.Now().Unix(),
-			DomainName: fmt.Sprintf("node%d.com", i+1),
-			IP:         fmt.Sprintf("192.168.1.%d", i+1),
-			TTL:        3600,
-			OwnerKey:   node.KeyPair.PublicKey,
-		}
-		node.BroadcastTransaction(tx)
+		domainName := fmt.Sprintf("node%d.com", i+1)
+		ip := fmt.Sprintf("192.168.1.%d", i+1)
+		ttl := int64(3600)
+		tx := blockchain.NewTransaction(blockchain.REGISTER, domainName, ip, ttl, node.KeyPair.PublicKey, &node.KeyPair.PrivateKey, node.TransactionPool)
+		node.BroadcastTransaction(*tx)
 		fmt.Printf("Node %d sent transaction for domain %s\n", i+1, tx.DomainName)
 	}
 
@@ -59,7 +57,7 @@ func SimpleSim1() {
 
 				node.MakeDNSRequest(domain)
 
-				time.Sleep(time.Duration(2 * time.Second))
+				time.Sleep(time.Duration(epochInterval * time.Second))
 			}
 		}(node, i)
 	}

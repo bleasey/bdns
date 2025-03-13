@@ -6,11 +6,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
-	"fmt"
+	"encoding/hex"
 	"log"
 	"math/big"
-	"time"
 	"sort"
+	"time"
 )
 
 type Block struct {
@@ -54,9 +54,9 @@ func (b *Block) SetupStakeData(prevStakeData map[string]int) map[string]int {
 	// Update stake data based on transactions
 	for _, tx := range b.Transactions {
 		if tx.Type == REGISTER {
-			stakeData[string(tx.OwnerKey)]++ // Increase stake for new domain registration
+			stakeData[hex.EncodeToString(tx.OwnerKey)]++ // Increase stake for new domain registration
 		} else if tx.Type == REVOKE {
-			stakeData[string(tx.OwnerKey)]-- // Decrease stake for revoked domain
+			stakeData[hex.EncodeToString(tx.OwnerKey)]-- // Decrease stake for revoked domain
 		}
 	}
 
@@ -111,8 +111,7 @@ func (b *Block) VerifyBlock(publicKeyBytes []byte) bool {
 	return ecdsa.Verify(publicKey, hash[:], r, s)
 }
 
-// Same as ComputeHash, but ommits Signature field
-func (b *Block) SerializeForSigning() []byte {
+func (b *Block) GetStakeDataBytes() []byte {
 	// Extract keys from the map
 	keys := make([]string, 0, len(b.StakeData))
 	for key := range b.StakeData {
@@ -124,9 +123,17 @@ func (b *Block) SerializeForSigning() []byte {
 	stakeDataBytes := []byte{}
 	for _, key := range keys {
 		value := b.StakeData[key]
-		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
+		decodedKey, _ := hex.DecodeString(key)
+		stakeDataBytes = append(stakeDataBytes, decodedKey...)
 		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
 	}
+
+	return stakeDataBytes
+}
+
+// Same as ComputeHash, but ommits Signature field
+func (b *Block) SerializeForSigning() []byte {
+	stakeDataBytes := b.GetStakeDataBytes()
 
 	data := bytes.Join(
 		[][]byte{
@@ -154,7 +161,7 @@ func NewGenesisBlock(slotLeader []byte, privateKey *ecdsa.PrivateKey, registryKe
 
 	// Initialize stakes to zero
 	for _, key := range registryKeys {
-		stakeData[string(key)] = 0
+		stakeData[hex.EncodeToString(key)] = 0
 	}
 
 	genesisBlock := Block{
@@ -177,20 +184,7 @@ func NewGenesisBlock(slotLeader []byte, privateKey *ecdsa.PrivateKey, registryKe
 }
 
 func (b *Block) ComputeHash() []byte {
-	// Extract keys from the map
-	keys := make([]string, 0, len(b.StakeData))
-	for key := range b.StakeData {
-		keys = append(keys, key)
-	}
-
-	sort.Strings(keys) // Sort keys to ensure deterministic order
-
-	stakeDataBytes := []byte{}
-	for _, key := range keys {
-		value := b.StakeData[key]
-		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
-		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
-	}
+	stakeDataBytes := b.GetStakeDataBytes()
 
 	data := bytes.Join(
 		[][]byte{
@@ -248,81 +242,68 @@ func DeserializeBlock(d []byte) *Block {
 
 func ValidateGenesisBlock(block *Block, registryKeys [][]byte, slotLeaderKey []byte) bool {
 	if block.Index != 0 {
-		fmt.Println("1")
 		return false
 	}
 
 	if !bytes.Equal(block.SlotLeader, slotLeaderKey) {
-		fmt.Println("2")
 		return false
 	}
 
 	if !block.VerifyBlock(slotLeaderKey) {
-		fmt.Println("3")
 		return false
 	}
 
 	if len(block.StakeData) != len(registryKeys) {
-		fmt.Println("4")
 		return false
 	}
 
 	for _, key := range registryKeys {
-		if block.StakeData[string(key)] != 0 {
-			fmt.Println("5")
+		if block.StakeData[hex.EncodeToString(key)] != 0 {
 			return false
 		}
 	}
 
 	if len(block.Transactions) != 0 {
-		fmt.Println("6")
 		return false
 	}
 
-	return bytes.Equal(block.Hash, block.ComputeHash())
+	if !bytes.Equal(block.Hash, block.ComputeHash()) {
+		return false
+	}
+
+	return true
 }
 
 func ValidateBlock(newBlock *Block, oldBlock *Block, slotLeaderKey []byte) bool {
-	newBlock.PrintBlock()
-	oldBlock.PrintBlock()
-	
 	if oldBlock.Index+1 != newBlock.Index {
-		fmt.Println("1")
 		return false
 	}
 
 	if !bytes.Equal(oldBlock.Hash, newBlock.PrevHash) {
-		fmt.Println("2")
 		return false
 	}
 
 	if !bytes.Equal(newBlock.SlotLeader, slotLeaderKey) {
-		fmt.Println("3")
 		return false
 	}
 
 	if !newBlock.VerifyBlock(slotLeaderKey) {
-		fmt.Println("4")
 		return false
 	}
 
 	if !bytes.Equal(newBlock.MerkleRootHash, newBlock.SetupMerkleTree()) {
-		fmt.Println("5")
 		return false
 	}
 
 	if !areStakesEqual(newBlock.StakeData, newBlock.SetupStakeData(oldBlock.StakeData)) {
-		fmt.Println("6")
 		return false
 	}
 
 	if !newBlock.ValidateTransactions() {
-		fmt.Println("7")
 		return false
 	}
 
 	if !bytes.Equal(newBlock.Hash, newBlock.ComputeHash()) {
-		fmt.Println("8")
 		return false
 	}
 
