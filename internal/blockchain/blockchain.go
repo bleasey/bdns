@@ -18,12 +18,12 @@ type Blockchain struct {
 }
 
 // CreateBlockchain creates a new blockchain DB
-func CreateBlockchain(chainID string, registryKeys [][]byte, randomness []byte) *Blockchain {
+func CreateBlockchain(chainID string) *Blockchain {
 	dir := "chaindata"
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		log.Fatalf("Failed to create directory %s: %v", dir, err)
 	}
-	
+
 	dbFile := fmt.Sprintf(dbFile, chainID)
 	if dbExists(dbFile) {
 		fmt.Println("Blockchain already exists.")
@@ -32,32 +32,18 @@ func CreateBlockchain(chainID string, registryKeys [][]byte, randomness []byte) 
 
 	var tip []byte
 
-	genesis := NewGenesisBlock(registryKeys, randomness)
-
 	db, err := bolt.Open(dbFile, 0600, nil)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucket([]byte(blocksBucket))
+		_, err := tx.CreateBucket([]byte(blocksBucket))
 		if err != nil {
 			log.Panic(err)
 		}
 
-		// Add a Hash -> Block mapping for the genesis block
-		err = b.Put(genesis.Hash, genesis.Serialize())
-		if err != nil {
-			log.Panic(err)
-		}
-
-		// Add a key for the last block hash
-		err = b.Put([]byte("l"), genesis.Hash)
-		if err != nil {
-			log.Panic(err)
-		}
-		tip = genesis.Hash
-
+		tip = nil
 		return nil
 	})
 	if err != nil {
@@ -67,6 +53,13 @@ func CreateBlockchain(chainID string, registryKeys [][]byte, randomness []byte) 
 	bc := Blockchain{tip, db}
 
 	return &bc
+}
+
+func (bc *Blockchain) CloseDB() error {
+	if bc.db != nil {
+		return bc.db.Close()
+	}
+	return nil
 }
 
 // OpenBlockchain opens an existing blockchain DB
@@ -114,18 +107,12 @@ func (bc *Blockchain) AddBlock(block *Block) {
 			log.Panic(err)
 		}
 
-		lastHash := b.Get([]byte("l"))
-		lastBlockData := b.Get(lastHash)
-		lastBlock := DeserializeBlock(lastBlockData)
-
-		// Add block only if it belongs to a longer chain
-		if block.Index > lastBlock.Index {
-			err = b.Put([]byte("l"), block.Hash)
-			if err != nil {
-				log.Panic(err)
-			}
-			bc.tip = block.Hash
+		// TODO: Chain comparison before adding block
+		err = b.Put([]byte("l"), block.Hash)
+		if err != nil {
+			log.Panic(err)
 		}
+		bc.tip = block.Hash
 
 		return nil
 	})

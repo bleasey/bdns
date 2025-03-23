@@ -3,9 +3,13 @@ package network
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/index"
@@ -14,8 +18,11 @@ import (
 // Represents a peer in the blockchain network
 type Node struct {
 	Address         string
+	Config          NodeConfig
 	KeyPair         *blockchain.KeyPair
 	RegistryKeys    [][]byte
+	SlotLeaders     map[int64][]byte // epoch to slot leader
+	SlotMutex       sync.Mutex
 	Peers           map[string]net.Conn // ip to connection
 	PeersMutex      sync.Mutex
 	TransactionPool map[int]*blockchain.Transaction
@@ -25,11 +32,19 @@ type Node struct {
 	BcMutex         sync.Mutex
 }
 
+// Node Config
+type NodeConfig struct {
+	InitialTimestamp int64
+	EpochInterval    int64
+	Seed             int64
+}
+
 // Initializes a new P2P node
 func NewNode(address string) *Node {
 	return &Node{
 		Address:         address,
 		KeyPair:         blockchain.NewKeyPair(),
+		SlotLeaders:     make(map[int64][]byte),
 		Peers:           make(map[string]net.Conn),
 		TransactionPool: make(map[int]*blockchain.Transaction),
 		IndexManager:    index.NewIndexManager(),
@@ -37,11 +52,14 @@ func NewNode(address string) *Node {
 	}
 }
 
-func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, randomness []byte, epochInterval int, seed int) {
+func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initialTimestamp int64, epochInterval int64, seed int64) {
 	n.RegistryKeys = registryKeys
-	n.Blockchain = blockchain.CreateBlockchain(chainID, registryKeys, randomness)
+	n.Blockchain = blockchain.CreateBlockchain(chainID)
+	n.Config.InitialTimestamp = initialTimestamp + epochInterval // First block is created 'epoch' secs after initialization
+	n.Config.EpochInterval = epochInterval
+	n.Config.Seed = seed
 	go n.Start()
-	go n.CreateBlockIfLeader(epochInterval, seed)
+	go n.CreateBlockIfLeader(epochInterval)
 }
 
 // Adds a peer to the list
@@ -65,8 +83,6 @@ func (n *Node) Start() {
 		log.Fatalf("Failed to start node: %v", err)
 	}
 	defer listener.Close()
-
-	log.Printf("Node listening on %s", n.Address)
 
 	for {
 		conn, err := listener.Accept()
@@ -144,18 +160,6 @@ func (n *Node) ProcessMessage(msg *Message, conn net.Conn) {
 
 	case MsgChainResponse:
 		n.Blockchain.ReplaceChain(conn, &n.BcMutex)
-
-	case MsgPeerRequest:
-		return
-		// n.SendPeers(conn)
-
-	case MsgPeerResponse:
-		return
-		// var peers []string
-		// json.Unmarshal(msg.Data, &peers)
-		// for _, peer := range peers {
-		//     n.ConnectToPeer(peer)
-		// }
 	}
 }
 
@@ -172,20 +176,16 @@ func (n *Node) Broadcast(msg Message) {
 	}
 }
 
-func (n *Node) SendToPeer(_ net.Conn, msg Message) {
-	/*
-	   Broadcasts msg for now
-	   TODO: Modify to send to a specific peer
-	         first argument is a connection object
-	*/
+// Send a message to a specific peer
+func (n *Node) SendToPeer(conn net.Conn, msg Message) {
 	n.PeersMutex.Lock()
 	defer n.PeersMutex.Unlock()
 
-	for _, conn := range n.Peers {
-		_, err := conn.Write(append(msg.Encode(), '\n')) // appending the delimiter to msg
-		if err != nil {
-			log.Println("Error broadcasting message:", err)
-		}
+	// fmt.Println("Sending to: ", conn.RemoteAddr(), " ", conn.LocalAddr())
+
+	_, err := conn.Write(append(msg.Encode(), '\n')) // appending the delimiter to msg
+	if err != nil {
+		log.Println("Error sending message to peer:", err)
 	}
 }
 
@@ -198,4 +198,65 @@ func (n *Node) ConnectToPeer(address string) {
 	}
 
 	n.AddPeer(address, conn)
+}
+
+// Get peers connected to each other for a simulation
+func InitializeNodesAsPeers(numNodes int, epochInterval int, seed int) ([]*Node, []string, [][]byte) {
+	// Create and start nodes
+	nodes := make([]*Node, numNodes)
+	registryKeys := make([][]byte, numNodes)
+
+	// Set node addresses and keys
+	nodeAddresses := []string{}
+	for i := 0; i < numNodes; i++ {
+		nodeAddress := fmt.Sprintf("localhost:500%d", i)
+		nodeAddresses = append(nodeAddresses, nodeAddress)
+		nodes[i] = NewNode(nodeAddress)
+		registryKeys[i] = nodes[i].KeyPair.PublicKey
+	}
+
+	currTimestamp := time.Now().Unix()
+
+	// Initialize nodes given registryKeys and params
+	for i := 0; i < numNodes; i++ {
+		nodes[i].InitializeNodeAsync(strconv.Itoa(i), registryKeys, currTimestamp, int64(epochInterval), int64(seed))
+	}
+
+	time.Sleep(2 * time.Second) // Let the network stabilize
+
+	// Connect nodes to each other
+	for i, node := range nodes {
+		for j, addr := range nodeAddresses {
+			if i != j {
+				node.ConnectToPeer(addr)
+			}
+		}
+	}
+
+	fmt.Printf("Nodes initialized as peers, listening on localhost:5000 to localhost:500%d.\n", numNodes-1)
+	fmt.Println("- - - - - - - - - - - -")
+
+	return nodes, nodeAddresses, registryKeys
+}
+
+func NodesCleanup(nodes []*Node) {
+	fmt.Println("- - - - - - - - - - - -")
+	fmt.Println("Cleaning up nodes....")
+
+	// Close all databases
+	for _, node := range nodes {
+		if err := node.Blockchain.CloseDB(); err != nil {
+			log.Printf("Failed to close database for node %s: %v", node.Address, err)
+		}
+	}
+
+	// Wait briefly to ensure file handles are released
+	time.Sleep(2 * time.Second)
+
+	// Delete chaindata directory
+	dir := "chaindata"
+	if err := os.RemoveAll(dir); err != nil {
+		log.Fatalf("Failed to clear directory %s: %v", dir, err)
+	}
+	fmt.Println("Simulation completed.")
 }

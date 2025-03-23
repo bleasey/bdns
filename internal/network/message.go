@@ -18,8 +18,9 @@ const (
 
 // Message represents a generic network message
 type Message struct {
-	Type MessageType `json:"type"`
-	Data []byte      `json:"data"`
+	Sender string      `json:"sender"`
+	Type   MessageType `json:"type"`
+	Data   []byte      `json:"data"`
 }
 
 // Encode message to JSON

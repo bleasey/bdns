@@ -13,9 +13,18 @@ import (
 )
 
 func (n *Node) AddBlock(block *blockchain.Block) {
+	epoch := (block.Timestamp - n.Config.InitialTimestamp) / n.Config.EpochInterval
+	slotLeader := n.GetSlotLeader(epoch)
+
+	// Verify received block
+	if (block.Index == 0 && !blockchain.ValidateGenesisBlock(block, n.RegistryKeys, slotLeader)) ||
+		(block.Index != 0 && !blockchain.ValidateBlock(block, n.Blockchain.GetLatestBlock(), slotLeader)) {
+		log.Println("Invalid block received at ", n.Address)
+		return
+	}
+
 	// Update index tree
 	n.TxMutex.Lock()
-	defer n.TxMutex.Unlock()
 	for _, tx := range block.Transactions {
 		switch tx.Type {
 		case blockchain.REGISTER:
@@ -29,6 +38,7 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 		}
 	}
 	blockchain.RemoveTxsFromPool(block.Transactions, n.TransactionPool)
+	n.TxMutex.Unlock()
 
 	// Add block to blockchain
 	n.BcMutex.Lock()
@@ -40,6 +50,29 @@ func (n *Node) AddTransaction(tx *blockchain.Transaction) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
 	n.TransactionPool[tx.TID] = tx
+}
+
+func (n *Node) GetSlotLeader(epoch int64) []byte {
+	n.SlotMutex.Lock()
+	defer n.SlotMutex.Unlock()
+
+	slotLeader, exists := n.SlotLeaders[epoch]
+	if exists {
+		return slotLeader
+	}
+
+	// Assuming map miss only happens for current epoch
+	if epoch == 0 {
+		slotLeader = consensus.GetSlotLeader(int(epoch), int(n.Config.Seed), n.RegistryKeys, nil)
+	} else {
+		n.BcMutex.Lock()
+		latestBlock := n.Blockchain.GetLatestBlock()
+		n.BcMutex.Unlock()
+		slotLeader = consensus.GetSlotLeader(int(epoch), int(n.Config.Seed), n.RegistryKeys, latestBlock.StakeData)
+	}
+
+	n.SlotLeaders[epoch] = slotLeader
+	return slotLeader
 }
 
 func (n *Node) DNSRequestHandler(req BDNSRequest, conn net.Conn) {
@@ -56,51 +89,72 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, conn net.Conn) {
 			Signature:  tx.Signature,
 		}
 		data, _ := json.Marshal(res)
-		msg := Message{Type: DNSResponse, Data: data}
-		n.SendToPeer(conn, msg)
+		msg := Message{Sender: n.Address, Type: DNSResponse, Data: data}
+		// n.SendToPeer(conn, msg)
+		n.Broadcast(msg)
 	}
-	log.Println("DNS Request from:", conn.RemoteAddr(), " To:", n.Address, " Domain Name:", req.DomainName)
+	fmt.Println("DNS Request received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", req.DomainName)
 }
 
 func (n *Node) DNSResponseHandler(res BDNSResponse, conn net.Conn) {
-	log.Println("DNS Response from:", conn.RemoteAddr(), " To:", n.Address, " Domain Name:", res.DomainName, " IP:", res.IP)
+	fmt.Println("DNS Response received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", res.DomainName, " IP:", res.IP)
 }
 
 func (n *Node) MakeDNSRequest(domainName string) {
 	req := BDNSRequest{DomainName: domainName}
 	data, _ := json.Marshal(req)
-	msg := Message{Type: DNSRequest, Data: data}
+	msg := Message{Sender: n.Address, Type: DNSRequest, Data: data}
 	n.Broadcast(msg)
 }
 
 func (n *Node) BroadcastTransaction(tx blockchain.Transaction) {
+	n.AddTransaction(&tx) // Add tx to own map
 	data, _ := json.Marshal(tx)
-	msg := Message{Type: MsgTransaction, Data: data}
+	msg := Message{Sender: n.Address, Type: MsgTransaction, Data: data}
 	n.Broadcast(msg)
 }
 
 func (n *Node) BroadcastBlock(block blockchain.Block) {
 	data, _ := json.Marshal(block)
-	msg := Message{Type: MsgBlock, Data: data}
+	msg := Message{Sender: n.Address, Type: MsgBlock, Data: data}
 	n.Broadcast(msg)
 }
 
-func (n *Node) CreateBlockIfLeader(epochInterval int, seed int) {
+func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 	ticker := time.NewTicker(time.Duration(epochInterval) * time.Second)
 	defer ticker.Stop()
-	epoch := 0 // Initialize epoch counter
+	epoch := int64(-1) // Initialize epoch counter
 
 	for range ticker.C {
-		n.BcMutex.Lock()
-		latestBlock := n.Blockchain.GetLatestBlock()
-		n.BcMutex.Unlock()
+		epoch++
+		if epoch == 0 {
+			currSlotLeader := n.GetSlotLeader(epoch)
 
-		leader := consensus.GetSlotLeader(epoch, seed, n.RegistryKeys, latestBlock.StakeData)
+			if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
+				continue
+			}
 
-		if bytes.Equal(leader, n.KeyPair.PublicKey) {
-			fmt.Printf("Node %s is the slot leader, creating a block...\n", n.Address)
+			// Create genesis block
+			fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
+
+			seedBytes := []byte(fmt.Sprintf("%d", n.Config.Seed))
+			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)
 
 			n.BcMutex.Lock()
+			n.Blockchain.AddBlock(genesisBlock)
+			n.BcMutex.Unlock()
+
+			n.BroadcastBlock(*genesisBlock)
+			fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
+		} else {
+			currSlotLeader := n.GetSlotLeader(epoch)
+
+			if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
+				continue
+			}
+
+			// Create block from transactions
+			fmt.Printf("Node %s is the slot leader, creating a block...\n", n.Address)
 
 			// Get transactions from the pool
 			n.TxMutex.Lock()
@@ -113,16 +167,19 @@ func (n *Node) CreateBlockIfLeader(epochInterval int, seed int) {
 
 			if len(transactions) == 0 {
 				fmt.Println("No transactions to add. Skipping block creation.")
-				n.BcMutex.Unlock()
 				continue
 			}
 
-			newBlock := blockchain.NewBlock(int64(epoch), n.KeyPair.PublicKey, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
+			fmt.Println("Transactions in block:", len(transactions))
+
+			n.BcMutex.Lock()
+			latestBlock := n.Blockchain.GetLatestBlock()
+			newBlock := blockchain.NewBlock(latestBlock.Index+1, currSlotLeader, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
 			n.Blockchain.AddBlock(newBlock)
 			n.BcMutex.Unlock()
-			n.BroadcastBlock(*newBlock)
-		}
 
-		epoch++
+			n.BroadcastBlock(*newBlock)
+			fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
+		}
 	}
 }
