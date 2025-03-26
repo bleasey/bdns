@@ -2,10 +2,8 @@ package network
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"github.com/bleasey/bdns/internal/blockchain"
@@ -75,51 +73,6 @@ func (n *Node) GetSlotLeader(epoch int64) []byte {
 	return slotLeader
 }
 
-func (n *Node) DNSRequestHandler(req BDNSRequest, conn net.Conn) {
-	n.TxMutex.Lock()
-	defer n.TxMutex.Unlock()
-	tx := n.IndexManager.GetIP(req.DomainName)
-	if tx != nil {
-		res := BDNSResponse{
-			Timestamp:  tx.Timestamp,
-			DomainName: tx.DomainName,
-			IP:         tx.IP,
-			TTL:        tx.TTL,
-			OwnerKey:   tx.OwnerKey,
-			Signature:  tx.Signature,
-		}
-		data, _ := json.Marshal(res)
-		msg := Message{Sender: n.Address, Type: DNSResponse, Data: data}
-		// n.SendToPeer(conn, msg)
-		n.Broadcast(msg)
-	}
-	fmt.Println("DNS Request received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", req.DomainName)
-}
-
-func (n *Node) DNSResponseHandler(res BDNSResponse, conn net.Conn) {
-	fmt.Println("DNS Response received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", res.DomainName, " IP:", res.IP)
-}
-
-func (n *Node) MakeDNSRequest(domainName string) {
-	req := BDNSRequest{DomainName: domainName}
-	data, _ := json.Marshal(req)
-	msg := Message{Sender: n.Address, Type: DNSRequest, Data: data}
-	n.Broadcast(msg)
-}
-
-func (n *Node) BroadcastTransaction(tx blockchain.Transaction) {
-	n.AddTransaction(&tx) // Add tx to own map
-	data, _ := json.Marshal(tx)
-	msg := Message{Sender: n.Address, Type: MsgTransaction, Data: data}
-	n.Broadcast(msg)
-}
-
-func (n *Node) BroadcastBlock(block blockchain.Block) {
-	data, _ := json.Marshal(block)
-	msg := Message{Sender: n.Address, Type: MsgBlock, Data: data}
-	n.Broadcast(msg)
-}
-
 func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 	ticker := time.NewTicker(time.Duration(epochInterval) * time.Second)
 	defer ticker.Stop()
@@ -144,7 +97,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			n.Blockchain.AddBlock(genesisBlock)
 			n.BcMutex.Unlock()
 
-			n.BroadcastBlock(*genesisBlock)
+			n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock)
 			fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
 		} else {
 			currSlotLeader := n.GetSlotLeader(epoch)
@@ -178,7 +131,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			n.Blockchain.AddBlock(newBlock)
 			n.BcMutex.Unlock()
 
-			n.BroadcastBlock(*newBlock)
+			n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
 			fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 		}
 	}
