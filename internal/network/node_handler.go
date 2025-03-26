@@ -78,6 +78,8 @@ func (n *Node) GetSlotLeader(epoch int64) []byte {
 func (n *Node) DNSRequestHandler(req BDNSRequest, conn net.Conn) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
+	fmt.Println("DNS Request received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", req.DomainName)
+
 	tx := n.IndexManager.GetIP(req.DomainName)
 	if tx != nil {
 		res := BDNSResponse{
@@ -92,9 +94,18 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, conn net.Conn) {
 		msg := Message{Sender: n.Address, Type: DNSResponse, Data: data}
 		// n.SendToPeer(conn, msg)
 		n.Broadcast(msg)
+	}else {
+		// If BDNS lookup fails, try resolving via traditional DNS
+		ip, err := ResolveLegacyDNS(req.DomainName)
+		if err == nil {
+			fmt.Printf("Node %s resolved %s via legacy DNS: %s\n", n.Address, req.DomainName, ip)
+			n.SendToPeer(conn, Message{Type: DNSResponse, Data: []byte(ip)})
+		} else {
+			fmt.Printf("Node %s could not resolve %s\n", n.Address, req.DomainName)
+		}
 	}
-	fmt.Println("DNS Request received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", req.DomainName)
-}
+
+	}
 
 func (n *Node) DNSResponseHandler(res BDNSResponse, conn net.Conn) {
 	fmt.Println("DNS Response received from:", conn.RemoteAddr(), " at:", n.Address, " Domain Name:", res.DomainName, " IP:", res.IP)
