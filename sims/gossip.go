@@ -10,14 +10,14 @@ import (
 	"github.com/bleasey/bdns/internal/network"
 )
 
-func SimpleSim1() {
+func SimGossip() {
 	// Constants
 	const numNodes = 4
 	const epochInterval = 10
 	const seed = 0
 	var wg sync.WaitGroup
 
-	nodes, _, _ := network.InitializeNodesAsPeers(numNodes, epochInterval, seed)
+	nodes := network.InitializeP2PNodes(numNodes, epochInterval, seed)
 
 	fmt.Printf("Waiting for end of epoch for creation of genesis block....\n\n")
 	time.Sleep(epochInterval * time.Second) // Waiting for genesis block to be broadcasted
