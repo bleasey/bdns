@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -55,7 +54,7 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 
 	// Initialize nodes given registryKeys and params
 	for i := 0; i < numNodes; i++ {
-		nodes[i].InitializeNodeAsync(strconv.Itoa(i), registryKeys, currTimestamp, int64(epochInterval), int64(seed))
+		nodes[i].InitializeNodeAsync(strconv.Itoa(i), registryKeys, currTimestamp, int64(epochInterval), float64(seed))
 	}
 
 	time.Sleep(2 * time.Second) // Let the network stabilize
@@ -66,7 +65,7 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 	return nodes
 }
 
-func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initialTimestamp int64, epochInterval int64, seed int64) {
+func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initialTimestamp int64, epochInterval int64, seed float64) {
 	n.RegistryKeys = registryKeys
 	n.Blockchain = blockchain.CreateBlockchain(chainID)
 	n.Config.InitialTimestamp = initialTimestamp + epochInterval // First block is created 'epoch' secs after initialization
@@ -92,10 +91,5 @@ func NodesCleanup(nodes []*Node) {
 	// Wait briefly to ensure file handles are released
 	time.Sleep(2 * time.Second)
 
-	// Delete chaindata directory
-	dir := "chaindata"
-	if err := os.RemoveAll(dir); err != nil {
-		log.Fatalf("Failed to clear directory %s: %v", dir, err)
-	}
 	fmt.Println("Simulation completed.")
 }
