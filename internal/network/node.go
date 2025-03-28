@@ -33,7 +33,7 @@ type Node struct {
 type NodeConfig struct {
 	InitialTimestamp int64
 	EpochInterval    int64
-	Seed             int64
+	Seed             float64
 }
 
 // NewNode initializes a blockchain node

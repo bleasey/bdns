@@ -26,8 +26,13 @@ func CreateBlockchain(chainID string) *Blockchain {
 
 	dbFile := fmt.Sprintf(dbFile, chainID)
 	if dbExists(dbFile) {
-		fmt.Println("Blockchain already exists.")
-		os.Exit(1)
+		if err := os.RemoveAll(dir); err != nil {
+			log.Fatalf("Failed to remove directory %s: %v", dir, err)
+		}
+	}
+
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		log.Fatalf("Failed to create directory %s: %v", dir, err)
 	}
 
 	var tip []byte

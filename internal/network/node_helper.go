@@ -61,12 +61,13 @@ func (n *Node) GetSlotLeader(epoch int64) []byte {
 
 	// Assuming map miss only happens for current epoch
 	if epoch == 0 {
-		slotLeader = consensus.GetSlotLeader(int(epoch), int(n.Config.Seed), n.RegistryKeys, nil)
+		slotLeader = consensus.GetSlotLeaderUtil(int(epoch), n.RegistryKeys, nil)
 	} else {
 		n.BcMutex.Lock()
 		latestBlock := n.Blockchain.GetLatestBlock()
 		n.BcMutex.Unlock()
-		slotLeader = consensus.GetSlotLeader(int(epoch), int(n.Config.Seed), n.RegistryKeys, latestBlock.StakeData)
+
+		slotLeader = consensus.GetSlotLeaderUtil(int(epoch), n.RegistryKeys, latestBlock.StakeData)
 	}
 
 	n.SlotLeaders[epoch] = slotLeader
@@ -90,7 +91,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			// Create genesis block
 			fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
 
-			seedBytes := []byte(fmt.Sprintf("%d", n.Config.Seed))
+			seedBytes := []byte(fmt.Sprintf("%f", n.Config.Seed))
 			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)
 
 			n.BcMutex.Lock()
