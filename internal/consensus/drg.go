@@ -8,12 +8,10 @@ import (
 	"time"
 )
 
-
 type SecretValues struct {
 	SecretValue int    // u_i -> revealed to other registries
 	RandomValue int	   // r_i -> kept as a secret
 }
-
 
 func CommitmentPhase(registryKeys [][]byte) (map[string]string, map[string]SecretValues) {
 	commitments := make(map[string]string)
