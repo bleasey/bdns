@@ -3,12 +3,15 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/index"
+	"github.com/bleasey/bdns/internal/consensus"
 	"github.com/libp2p/go-libp2p/core/network"
 )
 
@@ -27,6 +30,9 @@ type Node struct {
 	IndexManager    *index.IndexManager
 	Blockchain      *blockchain.Blockchain
 	BcMutex         sync.Mutex
+	RandomNumber    []byte
+    RandomMutex     sync.Mutex 
+	EpochRandoms    map[int64]map[string]consensus.SecretValues
 }
 
 // Node Config
@@ -34,6 +40,13 @@ type NodeConfig struct {
 	InitialTimestamp int64
 	EpochInterval    int64
 	Seed             float64
+}
+
+type RandomNumberMsg struct {
+    Epoch        int64
+    SecretValue  int     // u_i value
+    RandomValue  int     // r_i value
+    Sender       []byte  // Registry's public key
 }
 
 // NewNode initializes a blockchain node
@@ -51,12 +64,26 @@ func NewNode(ctx context.Context, addr string, topicName string) (*Node, error) 
 		TransactionPool: make(map[int]*blockchain.Transaction),
 		IndexManager:    index.NewIndexManager(),
 		Blockchain:      nil,
+		EpochRandoms:    make(map[int64]map[string]consensus.SecretValues),
 	}
 
 	go node.ListenForDirectMessages()
 	go node.P2PNetwork.ListenForGossip()
 	go node.HandleGossip()
 	return node, nil
+}
+
+func (n *Node) GenerateRandomNumber() []byte {
+    n.RandomMutex.Lock()
+    defer n.RandomMutex.Unlock()
+    
+    randomBytes := make([]byte, 32)
+    if _, err := rand.Read(randomBytes); err != nil {
+        log.Panic("Failed to generate random number:", err)
+    }
+    
+    n.RandomNumber = randomBytes
+    return randomBytes
 }
 
 // HandleGossip listens for messages from the gossip network
@@ -86,6 +113,15 @@ func (n *Node) HandleGossip() {
 				log.Println("Failed during unmarshalling")
 			}
 			n.AddBlock(&block)
+
+		case MsgRandomNumber:
+            var randomMsg RandomNumberMsg
+            err := json.Unmarshal(msg.Content, &randomMsg)
+            if err != nil {
+                log.Println("Failed to unmarshal random number message:", err)
+                continue
+            }
+            n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
 
 			// case MsgChainRequest:
 			// 	n.Blockchain.SendBlockchain(conn)
@@ -134,6 +170,20 @@ func (n *Node) MakeDNSRequest(domainName string) {
 	n.P2PNetwork.BroadcastMessage(DNSRequest, req)
 }
 
+func (n *Node) BroadcastRandomNumber(epoch int64, registryKeys [][]byte) {
+	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
+	nodeSecretValues := secretValues[hex.EncodeToString(n.KeyPair.PublicKey)]
+
+	msg := RandomNumberMsg{
+		Epoch: epoch,
+		SecretValue: nodeSecretValues.SecretValue,
+		RandomValue: nodeSecretValues.RandomValue,
+		Sender: n.KeyPair.PublicKey,
+	}
+	n.RandomNumberHandler(epoch, hex.EncodeToString(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
+    n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
+}
+
 func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
@@ -154,4 +204,22 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
 
 func (n *Node) DNSResponseHandler(res BDNSResponse) {
 	fmt.Println("DNS Response received at ", n.Address, " -> ", res.DomainName, " IP:", res.IP)
+}
+
+func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
+	n.RandomMutex.Lock()
+	defer n.RandomMutex.Unlock()
+	
+	if n.EpochRandoms == nil {
+		n.EpochRandoms = make(map[int64]map[string]consensus.SecretValues)
+	}
+
+	if n.EpochRandoms[epoch] == nil {
+        n.EpochRandoms[epoch] = make(map[string]consensus.SecretValues)
+    }
+
+    n.EpochRandoms[epoch][sender] = consensus.SecretValues{
+		SecretValue: secretValue,
+		RandomValue: randomValue,
+	}
 }

@@ -1,32 +1,28 @@
 package consensus
 
 import (
-	"fmt"
+	"encoding/hex"
 )
 
-func GetSlotLeaderUtil(epoch int, registryKeys [][]byte, stakeData map[string]int) []byte {
-	if (epoch == 0) {
-		return registryKeys[0]
-	}
-	_, secretValues := CommitmentPhase(registryKeys)
-    revealedValues := RevealPhase(secretValues)
-    seed := RecoveryPhase(revealedValues)
+func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRandoms map[string]SecretValues) []byte {
+	revealedValues := RevealPhase(epochRandoms)
+	seed := RecoveryPhase(revealedValues)
 
-	for _, val := range stakeData {
-		fmt.Println("StakeValue-> ", val)
-	}
-	
 	stakeProbs := GetStakes(stakeData)
 	cumulativeProb := 0.0
 
 	for _, registry := range registryKeys {
-		cumulativeProb += stakeProbs[string(registry)]
+		registryStr := hex.EncodeToString(registry)
+		prob := stakeProbs[registryStr]
+		cumulativeProb += prob
+
 		if seed <= cumulativeProb {
 			return registry
 		}
 	}
 
-	return registryKeys[len(registryKeys)-1]
+	lastRegistry := registryKeys[len(registryKeys)-1]
+	return lastRegistry
 }
 
 func GetStakes(stakeData map[string]int) map[string]float64 {
@@ -36,6 +32,16 @@ func GetStakes(stakeData map[string]int) map[string]float64 {
 	}
 
 	stakeProbs := make(map[string]float64)
+
+	// If sum is 0, give equal probability to all registries
+	if sum == 0 {
+		equalProb := 1.0 / float64(len(stakeData))
+		for registry := range stakeData {
+			stakeProbs[registry] = equalProb
+		}
+		return stakeProbs
+	}
+
 	for registry, numDomains := range stakeData {
 		stakeProbs[registry] = float64(numDomains) / sum
 	}

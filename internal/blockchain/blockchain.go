@@ -98,6 +98,7 @@ func OpenBlockchain(chainID string) *Blockchain {
 
 // AddBlock saves the block into the blockchain
 func (bc *Blockchain) AddBlock(block *Block) {
+	// add a mutex to the function
 	err := bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		blockInDB := b.Get(block.Hash)

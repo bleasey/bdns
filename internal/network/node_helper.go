@@ -44,6 +44,7 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 	n.Blockchain.AddBlock(block)
 }
 
+
 func (n *Node) AddTransaction(tx *blockchain.Transaction) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
@@ -61,13 +62,13 @@ func (n *Node) GetSlotLeader(epoch int64) []byte {
 
 	// Assuming map miss only happens for current epoch
 	if epoch == 0 {
-		slotLeader = consensus.GetSlotLeaderUtil(int(epoch), n.RegistryKeys, nil)
+		slotLeader = consensus.GetSlotLeaderUtil(n.RegistryKeys, nil, n.EpochRandoms[epoch])
 	} else {
 		n.BcMutex.Lock()
 		latestBlock := n.Blockchain.GetLatestBlock()
 		n.BcMutex.Unlock()
 
-		slotLeader = consensus.GetSlotLeaderUtil(int(epoch), n.RegistryKeys, latestBlock.StakeData)
+		slotLeader = consensus.GetSlotLeaderUtil(n.RegistryKeys, latestBlock.StakeData, n.EpochRandoms[epoch])
 	}
 
 	n.SlotLeaders[epoch] = slotLeader
@@ -82,18 +83,16 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 	for range ticker.C {
 		epoch++
 		if epoch == 0 {
-			currSlotLeader := n.GetSlotLeader(epoch)
+			currSlotLeader := n.RegistryKeys[0] // Default genesis slot leader
 
 			if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
 				continue
 			}
 
-			// Create genesis block
 			fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
 
 			seedBytes := []byte(fmt.Sprintf("%f", n.Config.Seed))
-			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)
-
+			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)			
 			n.BcMutex.Lock()
 			n.Blockchain.AddBlock(genesisBlock)
 			n.BcMutex.Unlock()
@@ -135,5 +134,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
 			fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 		}
+
+		n.BroadcastRandomNumber(epoch + 1, n.RegistryKeys) // Send the rand nums to be used for next epoch
 	}
 }
