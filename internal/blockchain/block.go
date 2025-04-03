@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"math/big"
 	"sort"
@@ -269,7 +268,6 @@ func ValidateGenesisBlock(block *Block, registryKeys [][]byte, slotLeaderKey []b
 	}
 
 	if !bytes.Equal(block.Hash, block.ComputeHash()) {
-		fmt.Println("the false conition is block.Hash != block.ComputeHash()", !bytes.Equal(block.Hash, block.ComputeHash()))
 		return false
 	}
 
@@ -278,7 +276,6 @@ func ValidateGenesisBlock(block *Block, registryKeys [][]byte, slotLeaderKey []b
 
 func ValidateBlock(newBlock *Block, oldBlock *Block, slotLeaderKey []byte) bool {
 	if oldBlock.Index+1 != newBlock.Index {
-		fmt.Println("the false conition is oldBlock.Index+1 != newBlock.Index", oldBlock.Index+1 != newBlock.Index)
 		return false
 	}
 
@@ -287,7 +284,6 @@ func ValidateBlock(newBlock *Block, oldBlock *Block, slotLeaderKey []byte) bool 
 	}
 
 	if !bytes.Equal(newBlock.SlotLeader, slotLeaderKey) {
-		fmt.Println("the false conition is newBlock.SlotLeader != slotLeaderKey", !bytes.Equal(newBlock.SlotLeader, slotLeaderKey))
 		return false
 	}
 

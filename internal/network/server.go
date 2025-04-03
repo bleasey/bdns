@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"log"
+	"encoding/hex"
 	"net"
 )
 
@@ -30,7 +31,7 @@ func StartDNSServer(port string) {
 			continue
 		}
 
-		query := string(buffer[:n])
+		query := hex.EncodeToString(buffer[:n])
 		log.Printf("Received query: %s", query)
 
 		response, err := ResolveDomain(query)

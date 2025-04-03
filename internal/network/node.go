@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"math/rand"
@@ -120,8 +121,7 @@ func (n *Node) HandleGossip() {
                 log.Println("Failed to unmarshal random number message:", err)
                 continue
             }
-            // Store the received random number
-            n.RandomNumberHandler(randomMsg.Epoch, string(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue)
+            n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
 
 			// case MsgChainRequest:
 			// 	n.Blockchain.SendBlockchain(conn)
@@ -172,7 +172,7 @@ func (n *Node) MakeDNSRequest(domainName string) {
 
 func (n *Node) BroadcastRandomNumber(epoch int64, registryKeys [][]byte) {
 	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
-	nodeSecretValues := secretValues[string(n.KeyPair.PublicKey)]
+	nodeSecretValues := secretValues[hex.EncodeToString(n.KeyPair.PublicKey)]
 
 	msg := RandomNumberMsg{
 		Epoch: epoch,
@@ -180,7 +180,7 @@ func (n *Node) BroadcastRandomNumber(epoch int64, registryKeys [][]byte) {
 		RandomValue: nodeSecretValues.RandomValue,
 		Sender: n.KeyPair.PublicKey,
 	}
-	n.RandomNumberHandler(epoch, string(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
+	n.RandomNumberHandler(epoch, hex.EncodeToString(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
     n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
 }
 
@@ -218,7 +218,7 @@ func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, 
         n.EpochRandoms[epoch] = make(map[string]consensus.SecretValues)
     }
 
-    n.EpochRandoms[epoch][string(sender)] = consensus.SecretValues{
+    n.EpochRandoms[epoch][sender] = consensus.SecretValues{
 		SecretValue: secretValue,
 		RandomValue: randomValue,
 	}

@@ -2,6 +2,7 @@ package index
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 
 	"github.com/bleasey/bdns/internal/blockchain"
 )
@@ -55,5 +56,5 @@ func (im *IndexManager) Remove(domain string) {
 
 func HashDomain(domain string) string {
 	hash := sha256.Sum256([]byte(domain))
-	return string(hash[:])
+	return hex.EncodeToString(hash[:])
 }

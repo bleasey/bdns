@@ -82,12 +82,10 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 
 	for range ticker.C {
 		epoch++
-		n.BroadcastRandomNumber(epoch, n.RegistryKeys)
 		if epoch == 0 {
-			currSlotLeader := n.GetSlotLeader(epoch)
+			currSlotLeader := n.RegistryKeys[0] // Default genesis slot leader
 
 			if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
-				fmt.Println("Not the slot leader for genesis block")
 				continue
 			}
 
@@ -136,5 +134,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
 			fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 		}
+
+		n.BroadcastRandomNumber(epoch + 1, n.RegistryKeys) // Send the rand nums to be used for next epoch
 	}
 }

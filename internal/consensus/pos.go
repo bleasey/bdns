@@ -12,7 +12,6 @@ func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRan
 	cumulativeProb := 0.0
 
 	for _, registry := range registryKeys {
-
 		registryStr := hex.EncodeToString(registry)
 		prob := stakeProbs[registryStr]
 		cumulativeProb += prob
