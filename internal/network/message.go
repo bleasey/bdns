@@ -14,12 +14,14 @@ const (
 	MsgChainResponse MessageType = "CHAIN_RESPONSE"
 	MsgPeerRequest   MessageType = "PEER_REQUEST"
 	MsgPeerResponse  MessageType = "PEER_RESPONSE"
+	MsgRandomNumber  MessageType = "RANDOM_NUMBER"
 )
 
 // Message represents a generic network message
 type Message struct {
-	Type MessageType `json:"type"`
-	Data []byte      `json:"data"`
+	Sender string      `json:"sender"`
+	Type   MessageType `json:"type"`
+	Data   []byte      `json:"data"`
 }
 
 // Encode message to JSON

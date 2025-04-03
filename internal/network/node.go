@@ -1,201 +1,225 @@
 package network
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
-	"net"
+	"math/rand"
 	"sync"
 
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/index"
+	"github.com/bleasey/bdns/internal/consensus"
+	"github.com/libp2p/go-libp2p/core/network"
 )
 
-// Represents a peer in the blockchain network
+// Node represents a blockchain peer
 type Node struct {
 	Address         string
+	Port            int
+	Config          NodeConfig
+	P2PNetwork      *P2PNetwork
 	KeyPair         *blockchain.KeyPair
 	RegistryKeys    [][]byte
-	Peers           map[string]net.Conn // ip to connection
-	PeersMutex      sync.Mutex
+	SlotLeaders     map[int64][]byte // epoch to slot leader
+	SlotMutex       sync.Mutex
 	TransactionPool map[int]*blockchain.Transaction
 	TxMutex         sync.Mutex
 	IndexManager    *index.IndexManager
-	Blockchain      *blockchain.Blockchain // Reference to the blockchain
+	Blockchain      *blockchain.Blockchain
 	BcMutex         sync.Mutex
+	RandomNumber    []byte
+    RandomMutex     sync.Mutex 
+	EpochRandoms    map[int64]map[string]consensus.SecretValues
 }
 
-// Initializes a new P2P node
-func NewNode(address string) *Node {
-	return &Node{
-		Address:         address,
+// Node Config
+type NodeConfig struct {
+	InitialTimestamp int64
+	EpochInterval    int64
+	Seed             float64
+}
+
+type RandomNumberMsg struct {
+    Epoch        int64
+    SecretValue  int     // u_i value
+    RandomValue  int     // r_i value
+    Sender       []byte  // Registry's public key
+}
+
+// NewNode initializes a blockchain node
+func NewNode(ctx context.Context, addr string, topicName string) (*Node, error) {
+	p2p, err := NewP2PNetwork(ctx, addr, topicName)
+	if err != nil {
+		return nil, err
+	}
+
+	node := &Node{
+		Address:         p2p.Host.Addrs()[0].String(),
+		P2PNetwork:      p2p,
 		KeyPair:         blockchain.NewKeyPair(),
-		Peers:           make(map[string]net.Conn),
+		SlotLeaders:     make(map[int64][]byte),
 		TransactionPool: make(map[int]*blockchain.Transaction),
 		IndexManager:    index.NewIndexManager(),
 		Blockchain:      nil,
-	}
-}
-
-func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, randomness []byte, epochInterval int, seed int) {
-	n.RegistryKeys = registryKeys
-	n.Blockchain = blockchain.CreateBlockchain(chainID, registryKeys, randomness)
-	go n.Start()
-	go n.CreateBlockIfLeader(epochInterval, seed)
-}
-
-// Adds a peer to the list
-func (n *Node) AddPeer(address string, conn net.Conn) {
-	n.PeersMutex.Lock()
-	defer n.PeersMutex.Unlock()
-	n.Peers[address] = conn
-}
-
-// Removes a peer from the list
-func (n *Node) RemovePeer(address string) {
-	n.PeersMutex.Lock()
-	defer n.PeersMutex.Unlock()
-	delete(n.Peers, address)
-}
-
-// Starts the node's server to listen for incoming connections
-func (n *Node) Start() {
-	listener, err := net.Listen("tcp", n.Address)
-	if err != nil {
-		log.Fatalf("Failed to start node: %v", err)
-	}
-	defer listener.Close()
-
-	log.Printf("Node listening on %s", n.Address)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("Connection error:", err)
-			continue
-		}
-		go n.HandleConnection(conn)
-	}
-}
-
-// Processes incoming messages from peers
-func (n *Node) HandleConnection(conn net.Conn) {
-	defer conn.Close()
-	address := conn.RemoteAddr().String()
-	n.AddPeer(address, conn)
-
-	reader := bufio.NewReader(conn)
-	for {
-		messageData, err := reader.ReadBytes('\n') // Read until newline
-		if err != nil {
-			log.Printf("Error reading from %s: %v", address, err)
-			break
-		}
-
-		msg, err := DecodeMessage(messageData)
-		if err != nil {
-			log.Printf("Invalid message from %s", address)
-			continue
-		}
-
-		n.ProcessMessage(msg, conn)
+		EpochRandoms:    make(map[int64]map[string]consensus.SecretValues),
 	}
 
-	n.RemovePeer(address)
+	go node.ListenForDirectMessages()
+	go node.P2PNetwork.ListenForGossip()
+	go node.HandleGossip()
+	return node, nil
 }
 
-// Handles messages based on their type
-func (n *Node) ProcessMessage(msg *Message, conn net.Conn) {
-	switch msg.Type {
-	case DNSRequest:
-		var req BDNSRequest
-		err := json.Unmarshal(msg.Data, &req)
-		if err != nil {
-			log.Println("Failed during unmarshalling")
-		}
-		n.DNSRequestHandler(req, conn)
+func (n *Node) GenerateRandomNumber() []byte {
+    n.RandomMutex.Lock()
+    defer n.RandomMutex.Unlock()
+    
+    randomBytes := make([]byte, 32)
+    if _, err := rand.Read(randomBytes); err != nil {
+        log.Panic("Failed to generate random number:", err)
+    }
+    
+    n.RandomNumber = randomBytes
+    return randomBytes
+}
 
-	case DNSResponse:
+// HandleGossip listens for messages from the gossip network
+func (n *Node) HandleGossip() {
+	for msg := range n.P2PNetwork.MsgChan {
+		switch msg.Type {
+		case DNSRequest:
+			var req BDNSRequest
+			err := json.Unmarshal(msg.Content, &req)
+			if err != nil {
+				log.Println("Failed during unmarshalling")
+			}
+			n.DNSRequestHandler(req, msg.Sender)
+
+		case MsgTransaction:
+			var tx blockchain.Transaction
+			err := json.Unmarshal(msg.Content, &tx)
+			if err != nil {
+				log.Println("Failed during unmarshalling")
+			}
+			n.AddTransaction(&tx)
+
+		case MsgBlock:
+			var block blockchain.Block
+			err := json.Unmarshal(msg.Content, &block)
+			if err != nil {
+				log.Println("Failed during unmarshalling")
+			}
+			n.AddBlock(&block)
+
+		case MsgRandomNumber:
+            var randomMsg RandomNumberMsg
+            err := json.Unmarshal(msg.Content, &randomMsg)
+            if err != nil {
+                log.Println("Failed to unmarshal random number message:", err)
+                continue
+            }
+            // Store the received random number
+            n.RandomNumberHandler(randomMsg.Epoch, string(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue)
+
+			// case MsgChainRequest:
+			// 	n.Blockchain.SendBlockchain(conn)
+
+			// case MsgChainResponse:
+			// 	n.Blockchain.ReplaceChain(conn, &n.BcMutex)
+		}
+	}
+
+	fmt.Println("Exiting gossip listener for ", n.Address)
+}
+
+// Handles direct peer-to-peer messages
+func (n *Node) ListenForDirectMessages() {
+	// Handler for dns response
+	n.P2PNetwork.Host.SetStreamHandler("/dns-response", func(s network.Stream) {
+		defer s.Close()
+		var response GossipMessage
+		if err := json.NewDecoder(s).Decode(&response); err != nil {
+			log.Println("Error decoding direct response:", err)
+			return
+		}
+
+		if response.Type != DNSResponse {
+			log.Println("Invalid message type received")
+			return
+		}
+
 		var res BDNSResponse
-		err := json.Unmarshal(msg.Data, &res)
+		err := json.Unmarshal(response.Content, &res)
 		if err != nil {
 			log.Println("Failed during unmarshalling")
 		}
-		n.DNSResponseHandler(res, conn)
-
-	case MsgTransaction:
-		var tx blockchain.Transaction
-		err := json.Unmarshal(msg.Data, &tx)
-		if err != nil {
-			log.Println("Failed during unmarshalling")
-		}
-		n.AddTransaction(&tx)
-
-	case MsgBlock:
-		var block blockchain.Block
-		err := json.Unmarshal(msg.Data, &block)
-		if err != nil {
-			log.Println("Failed during unmarshalling")
-		}
-		n.AddBlock(&block)
-
-	case MsgChainRequest:
-		n.Blockchain.SendBlockchain(conn)
-
-	case MsgChainResponse:
-		n.Blockchain.ReplaceChain(conn, &n.BcMutex)
-
-	case MsgPeerRequest:
-		return
-		// n.SendPeers(conn)
-
-	case MsgPeerResponse:
-		return
-		// var peers []string
-		// json.Unmarshal(msg.Data, &peers)
-		// for _, peer := range peers {
-		//     n.ConnectToPeer(peer)
-		// }
-	}
+		n.DNSResponseHandler(res)
+	})
 }
 
-// Sends a message to all connected peers
-func (n *Node) Broadcast(msg Message) {
-	n.PeersMutex.Lock()
-	defer n.PeersMutex.Unlock()
-
-	for _, conn := range n.Peers {
-		_, err := conn.Write(append(msg.Encode(), '\n')) // appending the delimiter to msg
-		if err != nil {
-			log.Println("Error broadcasting message:", err)
-		}
-	}
+// BroadcastTransaction sends a new transaction to peers
+func (n *Node) BroadcastTransaction(tx blockchain.Transaction) {
+	n.AddTransaction(&tx)
+	n.P2PNetwork.BroadcastMessage(MsgTransaction, tx)
 }
 
-func (n *Node) SendToPeer(_ net.Conn, msg Message) {
-	/*
-	   Broadcasts msg for now
-	   TODO: Modify to send to a specific peer
-	         first argument is a connection object
-	*/
-	n.PeersMutex.Lock()
-	defer n.PeersMutex.Unlock()
-
-	for _, conn := range n.Peers {
-		_, err := conn.Write(append(msg.Encode(), '\n')) // appending the delimiter to msg
-		if err != nil {
-			log.Println("Error broadcasting message:", err)
-		}
-	}
+func (n *Node) MakeDNSRequest(domainName string) {
+	req := BDNSRequest{DomainName: domainName}
+	n.P2PNetwork.BroadcastMessage(DNSRequest, req)
 }
 
-// Connects to a new peer
-func (n *Node) ConnectToPeer(address string) {
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		log.Printf("Failed to connect to peer %s", address)
-		return
+func (n *Node) BroadcastRandomNumber(epoch int64, registryKeys [][]byte) {
+	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
+	nodeSecretValues := secretValues[string(n.KeyPair.PublicKey)]
+
+	msg := RandomNumberMsg{
+		Epoch: epoch,
+		SecretValue: nodeSecretValues.SecretValue,
+		RandomValue: nodeSecretValues.RandomValue,
+		Sender: n.KeyPair.PublicKey,
+	}
+	n.RandomNumberHandler(epoch, string(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
+    n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
+}
+
+func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
+	n.TxMutex.Lock()
+	defer n.TxMutex.Unlock()
+	tx := n.IndexManager.GetIP(req.DomainName)
+	if tx != nil {
+		res := BDNSResponse{
+			Timestamp:  tx.Timestamp,
+			DomainName: tx.DomainName,
+			IP:         tx.IP,
+			TTL:        tx.TTL,
+			OwnerKey:   tx.OwnerKey,
+			Signature:  tx.Signature,
+		}
+		n.P2PNetwork.DirectMessage(DNSResponse, res, reqSender)
+	}
+	fmt.Println("DNS Request received at ", n.Address, " -> ", req.DomainName)
+}
+
+func (n *Node) DNSResponseHandler(res BDNSResponse) {
+	fmt.Println("DNS Response received at ", n.Address, " -> ", res.DomainName, " IP:", res.IP)
+}
+
+func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
+	n.RandomMutex.Lock()
+	defer n.RandomMutex.Unlock()
+	
+	if n.EpochRandoms == nil {
+		n.EpochRandoms = make(map[int64]map[string]consensus.SecretValues)
 	}
 
-	n.AddPeer(address, conn)
+	if n.EpochRandoms[epoch] == nil {
+        n.EpochRandoms[epoch] = make(map[string]consensus.SecretValues)
+    }
+
+    n.EpochRandoms[epoch][string(sender)] = consensus.SecretValues{
+		SecretValue: secretValue,
+		RandomValue: randomValue,
+	}
 }

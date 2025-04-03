@@ -17,8 +17,6 @@ Before running the project, ensure all dependencies are installed by executing:
 
 ### Run Simulation
    ```sh
-   mkdir chaindata
-   rm .\chaindata\*
    make
    ```
 

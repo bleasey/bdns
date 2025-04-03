@@ -6,8 +6,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
+	"encoding/hex"
+	"fmt"
 	"log"
 	"math/big"
+	"sort"
 	"time"
 )
 
@@ -52,9 +55,9 @@ func (b *Block) SetupStakeData(prevStakeData map[string]int) map[string]int {
 	// Update stake data based on transactions
 	for _, tx := range b.Transactions {
 		if tx.Type == REGISTER {
-			stakeData[string(tx.OwnerKey)]++ // Increase stake for new domain registration
+			stakeData[hex.EncodeToString(tx.OwnerKey)]++ // Increase stake for new domain registration
 		} else if tx.Type == REVOKE {
-			stakeData[string(tx.OwnerKey)]-- // Decrease stake for revoked domain
+			stakeData[hex.EncodeToString(tx.OwnerKey)]-- // Decrease stake for revoked domain
 		}
 	}
 
@@ -67,24 +70,39 @@ func (b *Block) SignBlock(privateKey *ecdsa.PrivateKey) []byte {
 
 	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hash[:])
 	if err != nil {
-		log.Panic(err)
+		log.Panic("Failed to sign block:", err)
 		return nil
 	}
 
-	signature := append(r.Bytes(), s.Bytes()...)
+	// Ensure r and s are exactly 32 bytes each
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+
+	// ECDSA signatures are (r, s), each 32 bytes. Pad to ensure fixed size.
+	rPadded := make([]byte, 32)
+	sPadded := make([]byte, 32)
+	copy(rPadded[32-len(rBytes):], rBytes)
+	copy(sPadded[32-len(sBytes):], sBytes)
+
+	// Concatenate r and s
+	signature := append(rPadded, sPadded...)
+	b.Signature = signature
+
 	return signature
 }
 
 func (b *Block) VerifyBlock(publicKeyBytes []byte) bool {
 	publicKey, err := BytesToPublicKey(publicKeyBytes)
 	if err != nil {
-		return false // Invalid public key format
+		log.Println("Invalid public key format")
+		return false
 	}
 
 	blockData := b.SerializeForSigning()
 	hash := sha256.Sum256(blockData)
 
-	if len(b.Signature) < 64 {
+	if len(b.Signature) != 64 {
+		log.Println("Invalid signature length")
 		return false
 	}
 
@@ -94,13 +112,29 @@ func (b *Block) VerifyBlock(publicKeyBytes []byte) bool {
 	return ecdsa.Verify(publicKey, hash[:], r, s)
 }
 
-// Same as ComputeHash, but ommits Signature field
-func (b *Block) SerializeForSigning() []byte {
+func (b *Block) GetStakeDataBytes() []byte {
+	// Extract keys from the map
+	keys := make([]string, 0, len(b.StakeData))
+	for key := range b.StakeData {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys) // Sort keys to ensure deterministic order
+
 	stakeDataBytes := []byte{}
-	for key, value := range b.StakeData {
-		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
+	for _, key := range keys {
+		value := b.StakeData[key]
+		decodedKey, _ := hex.DecodeString(key)
+		stakeDataBytes = append(stakeDataBytes, decodedKey...)
 		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
 	}
+
+	return stakeDataBytes
+}
+
+// Same as ComputeHash, but ommits Signature field
+func (b *Block) SerializeForSigning() []byte {
+	stakeDataBytes := b.GetStakeDataBytes()
 
 	data := bytes.Join(
 		[][]byte{
@@ -119,7 +153,7 @@ func (b *Block) SerializeForSigning() []byte {
 	return hash[:]
 }
 
-func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
+func NewGenesisBlock(slotLeader []byte, privateKey *ecdsa.PrivateKey, registryKeys [][]byte, randomness []byte) *Block {
 	stakeData := make(map[string]int)
 	n := len(registryKeys)
 	if n == 0 {
@@ -128,13 +162,13 @@ func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
 
 	// Initialize stakes to zero
 	for _, key := range registryKeys {
-		stakeData[string(key)] = 0
+		stakeData[hex.EncodeToString(key)] = 0
 	}
 
 	genesisBlock := Block{
 		Index:          0,
 		Timestamp:      time.Now().Unix(),
-		SlotLeader:     []byte{},
+		SlotLeader:     slotLeader,
 		Signature:      []byte{},
 		IndexHash:      []byte{},
 		MerkleRootHash: []byte{},
@@ -144,17 +178,14 @@ func NewGenesisBlock(registryKeys [][]byte, randomness []byte) Block {
 		Hash:           []byte{},
 	}
 
+	genesisBlock.Signature = genesisBlock.SignBlock(privateKey)
 	genesisBlock.Hash = genesisBlock.ComputeHash()
 
-	return genesisBlock
+	return &genesisBlock
 }
 
 func (b *Block) ComputeHash() []byte {
-	stakeDataBytes := []byte{}
-	for key, value := range b.StakeData {
-		stakeDataBytes = append(stakeDataBytes, []byte(key)...)
-		stakeDataBytes = append(stakeDataBytes, IntToByteArr(int64(value))...)
-	}
+	stakeDataBytes := b.GetStakeDataBytes()
 
 	data := bytes.Join(
 		[][]byte{
@@ -210,8 +241,44 @@ func DeserializeBlock(d []byte) *Block {
 	return &block
 }
 
-func (b *Block) ValidateBlock(newBlock Block, oldBlock Block, slotLeader []byte, leaderPubKey []byte) bool {
+func ValidateGenesisBlock(block *Block, registryKeys [][]byte, slotLeaderKey []byte) bool {
+	if block.Index != 0 {
+		return false
+	}
+
+	if !bytes.Equal(block.SlotLeader, slotLeaderKey) {
+		return false
+	}
+
+	if !block.VerifyBlock(slotLeaderKey) {
+		return false
+	}
+
+	if len(block.StakeData) != len(registryKeys) {
+		return false
+	}
+
+	for _, key := range registryKeys {
+		if block.StakeData[hex.EncodeToString(key)] != 0 {
+			return false
+		}
+	}
+
+	if len(block.Transactions) != 0 {
+		return false
+	}
+
+	if !bytes.Equal(block.Hash, block.ComputeHash()) {
+		fmt.Println("the false conition is block.Hash != block.ComputeHash()", !bytes.Equal(block.Hash, block.ComputeHash()))
+		return false
+	}
+
+	return true
+}
+
+func ValidateBlock(newBlock *Block, oldBlock *Block, slotLeaderKey []byte) bool {
 	if oldBlock.Index+1 != newBlock.Index {
+		fmt.Println("the false conition is oldBlock.Index+1 != newBlock.Index", oldBlock.Index+1 != newBlock.Index)
 		return false
 	}
 
@@ -219,11 +286,12 @@ func (b *Block) ValidateBlock(newBlock Block, oldBlock Block, slotLeader []byte,
 		return false
 	}
 
-	if !bytes.Equal(newBlock.SlotLeader, slotLeader) {
+	if !bytes.Equal(newBlock.SlotLeader, slotLeaderKey) {
+		fmt.Println("the false conition is newBlock.SlotLeader != slotLeaderKey", !bytes.Equal(newBlock.SlotLeader, slotLeaderKey))
 		return false
 	}
 
-	if !newBlock.VerifyBlock(leaderPubKey) {
+	if !newBlock.VerifyBlock(slotLeaderKey) {
 		return false
 	}
 

@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"log"
 )
 
@@ -66,7 +67,12 @@ func generateKeyPair() (ecdsa.PrivateKey, []byte) {
 	if err != nil {
 		log.Panic(err)
 	}
-	pubKey := append(private.PublicKey.X.Bytes(), private.PublicKey.Y.Bytes()...)
 
-	return *private, pubKey
+	// Encode the public key in ASN.1 DER format
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(&private.PublicKey)
+	if err != nil {
+		log.Panic("Failed to encode public key:", err)
+	}
+
+	return *private, pubKeyBytes
 }

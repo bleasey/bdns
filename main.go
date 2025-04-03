@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	sims.SimpleSim1() // Runs a simple bdns simulation with 4 peers
+	sims.SimGossip() // Runs a simple bdns p2p-gossip sim with 4 peers
 }
