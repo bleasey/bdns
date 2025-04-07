@@ -12,7 +12,7 @@ import (
 
 func SimGossip() {
 	// Constants
-	const numNodes = 4
+	const numNodes = 6
 	const epochInterval = 10
 	const seed = 0
 	var wg sync.WaitGroup

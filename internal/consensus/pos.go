@@ -8,11 +8,12 @@ func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRan
 	revealedValues := RevealPhase(epochRandoms)
 	seed := RecoveryPhase(revealedValues)
 
-	stakeProbs := GetStakes(stakeData)
 	cumulativeProb := 0.0
 
-	for _, registry := range registryKeys {
+	for index, registry := range registryKeys {
 		registryStr := hex.EncodeToString(registry)
+		stakeProbs := GetStakes(stakeData, index)
+		
 		prob := stakeProbs[registryStr]
 		cumulativeProb += prob
 
@@ -25,10 +26,17 @@ func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRan
 	return lastRegistry
 }
 
-func GetStakes(stakeData map[string]int) map[string]float64 {
+func GetStakes(stakeData map[string]int, index int) map[string]float64 {
 	sum := 0.0
-	for _, numDomains := range stakeData {
-		sum += float64(numDomains)
+
+	// create a slice of the keys
+	keys := make([]string, 0, len(stakeData))
+    for k := range stakeData {
+        keys = append(keys, k)
+    }
+
+	for i := index; i < len(keys); i++ {
+		sum += float64(stakeData[keys[i]])
 	}
 
 	stakeProbs := make(map[string]float64)
@@ -42,8 +50,9 @@ func GetStakes(stakeData map[string]int) map[string]float64 {
 		return stakeProbs
 	}
 
-	for registry, numDomains := range stakeData {
-		stakeProbs[registry] = float64(numDomains) / sum
+	for i := index; i < len(keys); i++ {
+		registry := keys[i]
+		stakeProbs[registry] = float64(stakeData[registry]) / sum
 	}
 
 	return stakeProbs
