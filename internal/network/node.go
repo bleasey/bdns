@@ -33,6 +33,9 @@ type Node struct {
 	RandomNumber    []byte
     RandomMutex     sync.Mutex 
 	EpochRandoms    map[int64]map[string]consensus.SecretValues
+	IsFullNode      bool // new field to differentiate full vs light
+	PeerID			string
+	KnownFullPeers  []string
 }
 
 // Node Config
@@ -50,7 +53,7 @@ type RandomNumberMsg struct {
 }
 
 // NewNode initializes a blockchain node
-func NewNode(ctx context.Context, addr string, topicName string) (*Node, error) {
+func NewNode(ctx context.Context, addr string, topicName string, isFullNode bool) (*Node, error) {
 	p2p, err := NewP2PNetwork(ctx, addr, topicName)
 	if err != nil {
 		return nil, err
@@ -65,6 +68,10 @@ func NewNode(ctx context.Context, addr string, topicName string) (*Node, error) 
 		IndexManager:    index.NewIndexManager(),
 		Blockchain:      nil,
 		EpochRandoms:    make(map[int64]map[string]consensus.SecretValues),
+		IsFullNode:      isFullNode,
+		PeerID: p2p.Host.ID().String(),
+		KnownFullPeers:  []string{},
+
 	}
 
 	go node.ListenForDirectMessages()
@@ -123,6 +130,17 @@ func (n *Node) HandleGossip() {
             }
             n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
 
+		case MsgInv:
+			n.HandleINV(msg.Sender)
+
+		case MsgGetData:
+			n.HandleGetData(msg.Sender)
+
+		case MsgGetBlock:
+			n.HandleGetBlock(msg.Sender)
+
+		case MsgGetMerkle:
+			n.HandleMerkleRequest(msg.Sender)
 			// case MsgChainRequest:
 			// 	n.Blockchain.SendBlockchain(conn)
 
@@ -185,6 +203,20 @@ func (n *Node) BroadcastRandomNumber(epoch int64, registryKeys [][]byte) {
 }
 
 func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
+	// If this node is a light node, forward the query to a known full node
+	if !n.IsFullNode {
+		fmt.Println("Light node forwarding DNS query for:", req.DomainName)
+		for _, peerID := range n.KnownFullPeers {
+			if peerID != reqSender {
+				n.P2PNetwork.DirectMessage(DNSRequest, req, peerID)
+				fmt.Println(" Light node forwarded query to:", peerID)
+				break
+			}
+		}
+		return
+	}
+
+	// Otherwise, full node will handle it
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
 	tx := n.IndexManager.GetIP(req.DomainName)
@@ -203,7 +235,7 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
 }
 
 func (n *Node) DNSResponseHandler(res BDNSResponse) {
-	fmt.Println("DNS Response received at ", n.Address, " -> ", res.DomainName, " IP:", res.IP)
+	fmt.Println("DNS Response with Full node received at ", n.Address, " -> ", res.DomainName, " IP:", res.IP)
 }
 
 func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
@@ -223,3 +255,5 @@ func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, 
 		RandomValue: randomValue,
 	}
 }
+
+

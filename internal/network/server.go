@@ -8,7 +8,7 @@ import (
 )
 
 // StartDNSServer initializes and starts a UDP-based DNS server
-func StartDNSServer(port string) {
+func StartDNSServer(port string,node *Node) {
 	addr := fmt.Sprintf(":%s", port)
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
@@ -34,7 +34,7 @@ func StartDNSServer(port string) {
 		query := hex.EncodeToString(buffer[:n])
 		log.Printf("Received query: %s", query)
 
-		response, err := ResolveDomain(query)
+		response, err := ResolveDomain(query,node)
 		if err != nil {
 			log.Printf("Resolution error: %v", err)
 			response = "ERROR: Domain not found"

@@ -233,3 +233,23 @@ func (bc *Blockchain) GetLatestBlock() *Block {
 
 	return block
 }
+
+// GetBlocksFrom returns all blocks starting from the specified height (index)
+func (bc *Blockchain) GetBlocksFrom(startHeight int) []*Block {
+	var blocks []*Block
+	bci := bc.Iterator()
+
+	for {
+		block := bci.Next()
+
+		if int(block.Index) >= startHeight {
+			blocks = append([]*Block{block}, blocks...) // Prepend to maintain order
+		}
+
+		if block.Index == 0 {
+			break
+		}
+	}
+
+	return blocks
+}
