@@ -1,0 +1,24 @@
+name: linter
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout
+      - uses: actions/setup-go
+        with:
+          go-version: stable
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action
+        with:
+          version: v1.64.5
+      

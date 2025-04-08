@@ -1,9 +1,9 @@
 package network
 
 import (
+	"encoding/hex"
 	"fmt"
 	"log"
-	"encoding/hex"
 	"net"
 )
 

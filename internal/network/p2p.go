@@ -100,7 +100,10 @@ func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}) 
 	}
 
 	msgData, _ := json.Marshal(gossipMsg)
-	p.Topic.Publish(context.Background(), msgData)
+	
+	if err := p.Topic.Publish(context.Background(), msgData); err != nil {
+		log.Println("Failed to publish message:", err)
+	}
 }
 
 // DirectMessage sends a message to a specific peer
@@ -125,7 +128,9 @@ func (p *P2PNetwork) DirectMessage(msgType MessageType, content interface{}, pee
 		Content: data,
 	}
 
-	json.NewEncoder(stream).Encode(responseMsg)
+	if err := json.NewEncoder(stream).Encode(responseMsg); err != nil {
+		log.Println("Failed to encode message:", err)
+	}
 }
 
 // ConnectToPeer connects to another peer via multiaddress
