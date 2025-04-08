@@ -13,7 +13,7 @@ func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRan
 	for index, registry := range registryKeys {
 		registryStr := hex.EncodeToString(registry)
 		stakeProbs := GetStakes(stakeData, index)
-		
+
 		prob := stakeProbs[registryStr]
 		cumulativeProb += prob
 
@@ -31,9 +31,9 @@ func GetStakes(stakeData map[string]int, index int) map[string]float64 {
 
 	// create a slice of the keys
 	keys := make([]string, 0, len(stakeData))
-    for k := range stakeData {
-        keys = append(keys, k)
-    }
+	for k := range stakeData {
+		keys = append(keys, k)
+	}
 
 	for i := index; i < len(keys); i++ {
 		sum += float64(stakeData[keys[i]])

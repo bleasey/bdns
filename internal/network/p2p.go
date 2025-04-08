@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-pubsub"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -100,7 +100,7 @@ func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}) 
 	}
 
 	msgData, _ := json.Marshal(gossipMsg)
-	
+
 	if err := p.Topic.Publish(context.Background(), msgData); err != nil {
 		log.Println("Failed to publish message:", err)
 	}
