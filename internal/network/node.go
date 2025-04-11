@@ -94,55 +94,68 @@ func (n *Node) GenerateRandomNumber() []byte {
     return randomBytes
 }
 
+func (n *Node) HandleMsgGivenType(msg GossipMessage) {
+	// This includes messages received from BOTH direct and broadcast mode
+	// since for now there is no difference in handling based on the mode of reception
+	switch msg.Type {
+	case DNSRequest:
+		var req BDNSRequest
+		err := json.Unmarshal(msg.Content, &req)
+		if err != nil {
+			log.Println("Failed during unmarshalling")
+		}
+		n.DNSRequestHandler(req, msg.Sender)
+
+	case DNSResponse:
+		var res BDNSResponse
+		err := json.Unmarshal(msg.Content, &res)
+		if err != nil {
+			log.Println("Failed during unmarshalling")
+		}
+		n.DNSResponseHandler(res)
+
+	case MsgTransaction:
+		var tx blockchain.Transaction
+		err := json.Unmarshal(msg.Content, &tx)
+		if err != nil {
+			log.Println("Failed during unmarshalling")
+		}
+		n.AddTransaction(&tx)
+
+	case MsgBlock:
+		var block blockchain.Block
+		err := json.Unmarshal(msg.Content, &block)
+		if err != nil {
+			log.Println("Failed during unmarshalling")
+		}
+		n.AddBlock(&block)
+
+	case MsgRandomNumber:
+		var randomMsg RandomNumberMsg
+		err := json.Unmarshal(msg.Content, &randomMsg)
+		if err != nil {
+			log.Println("Failed to unmarshal random number message:", err)
+		}
+		n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
+
+	case MsgInv:
+		n.HandleINV(msg.Sender)
+
+	case MsgGetData:
+		n.HandleGetData(msg.Sender)
+
+	case MsgGetBlock:
+		n.HandleGetBlock(msg.Sender)
+
+	case MsgGetMerkle:
+		n.HandleMerkleRequest(msg.Sender)
+	}
+}
+
 // HandleGossip listens for messages from the gossip network
 func (n *Node) HandleGossip() {
 	for msg := range n.P2PNetwork.MsgChan {
-		switch msg.Type {
-		case DNSRequest:
-			var req BDNSRequest
-			err := json.Unmarshal(msg.Content, &req)
-			if err != nil {
-				log.Println("Failed during unmarshalling")
-			}
-			n.DNSRequestHandler(req, msg.Sender)
-
-		case MsgTransaction:
-			var tx blockchain.Transaction
-			err := json.Unmarshal(msg.Content, &tx)
-			if err != nil {
-				log.Println("Failed during unmarshalling")
-			}
-			n.AddTransaction(&tx)
-
-		case MsgBlock:
-			var block blockchain.Block
-			err := json.Unmarshal(msg.Content, &block)
-			if err != nil {
-				log.Println("Failed during unmarshalling")
-			}
-			n.AddBlock(&block)
-
-		case MsgRandomNumber:
-            var randomMsg RandomNumberMsg
-            err := json.Unmarshal(msg.Content, &randomMsg)
-            if err != nil {
-                log.Println("Failed to unmarshal random number message:", err)
-                continue
-            }
-            n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
-
-		case MsgInv:
-			n.HandleINV(msg.Sender)
-
-		case MsgGetData:
-			n.HandleGetData(msg.Sender)
-
-		case MsgGetBlock:
-			n.HandleGetBlock(msg.Sender)
-
-		case MsgGetMerkle:
-			n.HandleMerkleRequest(msg.Sender)
-		}
+		n.HandleMsgGivenType(msg)
 	}
 
 	fmt.Println("Exiting gossip listener for ", n.Address)
@@ -153,23 +166,13 @@ func (n *Node) ListenForDirectMessages() {
 	// Handler for dns response
 	n.P2PNetwork.Host.SetStreamHandler("/dns-response", func(s network.Stream) {
 		defer s.Close()
-		var response GossipMessage
-		if err := json.NewDecoder(s).Decode(&response); err != nil {
+		var msg GossipMessage
+		if err := json.NewDecoder(s).Decode(&msg); err != nil {
 			log.Println("Error decoding direct response:", err)
 			return
 		}
 
-		if response.Type != DNSResponse {
-			log.Println("Invalid message type received")
-			return
-		}
-
-		var res BDNSResponse
-		err := json.Unmarshal(response.Content, &res)
-		if err != nil {
-			log.Println("Failed during unmarshalling")
-		}
-		n.DNSResponseHandler(res)
+		n.HandleMsgGivenType(msg)
 	})
 }
 
