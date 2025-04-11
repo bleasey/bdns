@@ -9,7 +9,7 @@ import (
 )
 
 // ResolveDomain queries the BDNS blockchain for a domain
-func ResolveDomain(domain string,n *Node) (string, error) {
+func ResolveDomain(domain string, n *Node) (string, error) {
 	// Check local cache first
 	if ip, found := GetFromCache(domain); found {
 		return ip, nil

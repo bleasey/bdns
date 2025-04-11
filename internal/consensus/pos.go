@@ -12,7 +12,7 @@ func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRan
 	for index, registry := range registryKeys {
 		registryStr := hex.EncodeToString(registry)
 		stakeProbs := GetStakes(index, registryKeys, stakeData)
-		
+
 		prob := stakeProbs[registryStr]
 		cumulativeProb += prob
 
@@ -20,7 +20,7 @@ func GetSlotLeaderUtil(registryKeys [][]byte, stakeData map[string]int, epochRan
 			return registry
 		}
 	}
-	
+
 	lastRegistry := registryKeys[len(registryKeys)-1]
 	return lastRegistry
 }
