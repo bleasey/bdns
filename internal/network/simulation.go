@@ -21,8 +21,8 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 	for i := 0; i < numNodes; i++ {
 		port := 4001 + i
 		addr := fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port)
-
-		node, err := NewNode(ctx, addr, topicName)
+		isFull := i != 1 //  Only node 0 is light node
+		node, err := NewNode(ctx, addr, topicName,isFull)
 		if err != nil {
 			log.Fatalf("Error creating node on port %d: %v", port, err)
 		}
@@ -62,6 +62,18 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 	fmt.Printf("Nodes initialized as peers, listening on localhost:4001 to localhost:400%d.\n", numNodes)
 	fmt.Println("- - - - - - - - - - - -")
 
+	// Collect full node peer IDs
+	fullPeerIDs := []string{}
+	for _, node := range nodes {
+		if node.IsFullNode {
+			fullPeerIDs = append(fullPeerIDs, node.PeerID)
+		}
+	}
+
+	// Assign known full peers to every node
+	for _, node := range nodes {
+		node.KnownFullPeers = fullPeerIDs
+	}
 	return nodes
 }
 
