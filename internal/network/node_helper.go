@@ -44,7 +44,6 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 	n.Blockchain.AddBlock(block)
 }
 
-
 func (n *Node) AddTransaction(tx *blockchain.Transaction) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
@@ -92,7 +91,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
 
 			seedBytes := []byte(fmt.Sprintf("%f", n.Config.Seed))
-			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)			
+			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)
 			n.BcMutex.Lock()
 			n.Blockchain.AddBlock(genesisBlock)
 			n.BcMutex.Unlock()
@@ -135,7 +134,7 @@ func (n *Node) CreateBlockIfLeader(epochInterval int64) {
 			fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 		}
 
-		n.BroadcastRandomNumber(epoch + 1, n.RegistryKeys) // Send the rand nums to be used for next epoch
+		n.BroadcastRandomNumber(epoch + 1) // Send the rand nums to be used for next epoch
 	}
 }
 

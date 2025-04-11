@@ -56,15 +56,15 @@ func areStakesEqual(m1, m2 map[string]int) bool {
 	return true
 }
 
-func (t *Transaction) PrintTx() {
-	fmt.Printf("\nTID: %x\n", t.TID)
-	fmt.Printf("Type: %d\n", t.Type)
-	fmt.Printf("Timestamp: %d\n", t.Timestamp)
-	fmt.Printf("DomainName: %s\n", t.DomainName)
-	fmt.Printf("IP: %s\n", t.IP)
-	fmt.Printf("TTL: %d\n", t.TTL)
-	fmt.Printf("OwnerKey: %s\n", t.OwnerKey)
-	fmt.Printf("Signature: %d\n\n", t.Signature)
+func (tx *Transaction) PrintTx() {
+	fmt.Printf("\nTID: %x\n", tx.TID)
+	fmt.Printf("Type: %d\n", tx.Type)
+	fmt.Printf("Timestamp: %d\n", tx.Timestamp)
+	fmt.Printf("DomainName: %s\n", tx.DomainName)
+	fmt.Printf("IP: %s\n", tx.IP)
+	fmt.Printf("TTL: %d\n", tx.TTL)
+	fmt.Printf("OwnerKey: %s\n", tx.OwnerKey)
+	fmt.Printf("Signature: %d\n\n", tx.Signature)
 }
 
 func (b *Block) PrintBlock() {

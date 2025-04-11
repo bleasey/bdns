@@ -9,8 +9,8 @@ import (
 )
 
 type SecretValues struct {
-	SecretValue int // u_i -> revealed to other registries
-	RandomValue int // r_i -> kept as a secret
+	SecretValue int // uI -> revealed to other registries
+	RandomValue int // rI -> kept as a secret
 }
 
 func CommitmentPhase(registryKeys [][]byte) (map[string]string, map[string]SecretValues) {
@@ -18,13 +18,13 @@ func CommitmentPhase(registryKeys [][]byte) (map[string]string, map[string]Secre
 	secretValues := make(map[string]SecretValues)
 
 	numRegistries := len(registryKeys)
-	rand.Seed(time.Now().UnixNano())
+	rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for i := 0; i < numRegistries; i++ {
-		u_i := rand.Intn(1000) + 1
-		r_i := rand.Intn(1000) + 1
+		uI := rand.Intn(1000) + 1
+		rI := rand.Intn(1000) + 1
 
-		data := fmt.Sprintf("%d%d", r_i, u_i)
+		data := fmt.Sprintf("%d%d", rI, uI)
 		hash := sha256.Sum256([]byte(data))
 		commitment := fmt.Sprintf("%x", hash) // stored in hexa
 
@@ -33,8 +33,8 @@ func CommitmentPhase(registryKeys [][]byte) (map[string]string, map[string]Secre
 
 		// Store secret values
 		secretValues[hex.EncodeToString(registryKeys[i])] = SecretValues{
-			SecretValue: u_i,
-			RandomValue: r_i,
+			SecretValue: uI,
+			RandomValue: rI,
 		}
 	}
 

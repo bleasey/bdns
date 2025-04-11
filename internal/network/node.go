@@ -2,16 +2,16 @@ package network
 
 import (
 	"context"
-	"encoding/json"
+	cryptorand "crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"sync"
 
 	"github.com/bleasey/bdns/internal/blockchain"
-	"github.com/bleasey/bdns/internal/index"
 	"github.com/bleasey/bdns/internal/consensus"
+	"github.com/bleasey/bdns/internal/index"
 	"github.com/libp2p/go-libp2p/core/network"
 )
 
@@ -31,7 +31,7 @@ type Node struct {
 	Blockchain      *blockchain.Blockchain
 	BcMutex         sync.Mutex
 	RandomNumber    []byte
-    RandomMutex     sync.Mutex 
+	RandomMutex     sync.Mutex
 	EpochRandoms    map[int64]map[string]consensus.SecretValues
 	IsFullNode      bool // new field to differentiate full vs light
 	PeerID			string
@@ -46,10 +46,10 @@ type NodeConfig struct {
 }
 
 type RandomNumberMsg struct {
-    Epoch        int64
-    SecretValue  int     // u_i value
-    RandomValue  int     // r_i value
-    Sender       []byte  // Registry's public key
+	Epoch       int64
+	SecretValue int    // uI value
+	RandomValue int    // rI value
+	Sender      []byte // Registry's public key
 }
 
 // NewNode initializes a blockchain node
@@ -81,16 +81,16 @@ func NewNode(ctx context.Context, addr string, topicName string, isFullNode bool
 }
 
 func (n *Node) GenerateRandomNumber() []byte {
-    n.RandomMutex.Lock()
-    defer n.RandomMutex.Unlock()
-    
-    randomBytes := make([]byte, 32)
-    if _, err := rand.Read(randomBytes); err != nil {
-        log.Panic("Failed to generate random number:", err)
-    }
-    
-    n.RandomNumber = randomBytes
-    return randomBytes
+	n.RandomMutex.Lock()
+	defer n.RandomMutex.Unlock()
+
+	randomBytes := make([]byte, 32)
+	if _, err := cryptorand.Read(randomBytes); err != nil {
+		log.Panic("Failed to generate random number:", err)
+	}
+
+	n.RandomNumber = randomBytes
+	return randomBytes
 }
 
 // HandleGossip listens for messages from the gossip network
@@ -122,13 +122,13 @@ func (n *Node) HandleGossip() {
 			n.AddBlock(&block)
 
 		case MsgRandomNumber:
-            var randomMsg RandomNumberMsg
-            err := json.Unmarshal(msg.Content, &randomMsg)
-            if err != nil {
-                log.Println("Failed to unmarshal random number message:", err)
-                continue
-            }
-            n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
+			var randomMsg RandomNumberMsg
+			err := json.Unmarshal(msg.Content, &randomMsg)
+			if err != nil {
+				log.Println("Failed to unmarshal random number message:", err)
+				continue
+			}
+			n.RandomNumberHandler(randomMsg.Epoch, hex.EncodeToString(randomMsg.Sender), randomMsg.SecretValue, randomMsg.RandomValue) // Store the received random number
 
 		case MsgInv:
 			n.HandleINV(msg.Sender)
@@ -188,18 +188,18 @@ func (n *Node) MakeDNSRequest(domainName string) {
 	n.P2PNetwork.BroadcastMessage(DNSRequest, req)
 }
 
-func (n *Node) BroadcastRandomNumber(epoch int64, registryKeys [][]byte) {
+func (n *Node) BroadcastRandomNumber(epoch int64) {
 	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
 	nodeSecretValues := secretValues[hex.EncodeToString(n.KeyPair.PublicKey)]
 
 	msg := RandomNumberMsg{
-		Epoch: epoch,
+		Epoch:       epoch,
 		SecretValue: nodeSecretValues.SecretValue,
 		RandomValue: nodeSecretValues.RandomValue,
-		Sender: n.KeyPair.PublicKey,
+		Sender:      n.KeyPair.PublicKey,
 	}
 	n.RandomNumberHandler(epoch, hex.EncodeToString(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
-    n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
+	n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
 }
 
 func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
@@ -241,16 +241,16 @@ func (n *Node) DNSResponseHandler(res BDNSResponse) {
 func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
 	n.RandomMutex.Lock()
 	defer n.RandomMutex.Unlock()
-	
+
 	if n.EpochRandoms == nil {
 		n.EpochRandoms = make(map[int64]map[string]consensus.SecretValues)
 	}
 
 	if n.EpochRandoms[epoch] == nil {
-        n.EpochRandoms[epoch] = make(map[string]consensus.SecretValues)
-    }
+		n.EpochRandoms[epoch] = make(map[string]consensus.SecretValues)
+	}
 
-    n.EpochRandoms[epoch][sender] = consensus.SecretValues{
+	n.EpochRandoms[epoch][sender] = consensus.SecretValues{
 		SecretValue: secretValue,
 		RandomValue: randomValue,
 	}
