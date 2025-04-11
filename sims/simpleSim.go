@@ -10,17 +10,18 @@ import (
 	"github.com/bleasey/bdns/internal/network"
 )
 
-func SimGossip() {
+func SimpleSim() {
 	// Constants
 	const numNodes = 6
-	const epochInterval = 10
+	const slotInterval = 5
+	const slotsPerEpoch = 2
 	const seed = 0
 	var wg sync.WaitGroup
 
-	nodes := network.InitializeP2PNodes(numNodes, epochInterval, seed)
+	nodes := network.InitializeP2PNodes(numNodes, slotInterval, slotsPerEpoch, seed)
 
-	fmt.Printf("Waiting for end of epoch for creation of genesis block....\n\n")
-	time.Sleep(epochInterval * time.Second) // Waiting for genesis block to be broadcasted
+	fmt.Println("Waiting for genesis block to be created...\n")
+	time.Sleep(time.Duration(slotInterval) * time.Second)
 
 	// Each node registers its own domains
 	for i, node := range nodes {
@@ -33,7 +34,7 @@ func SimGossip() {
 	}
 
 	fmt.Printf("Waiting for end of epoch for block creation....\n\n")
-	time.Sleep(epochInterval * time.Second) // Let transactions propagate via block from first epoch
+	time.Sleep(slotInterval * time.Second) // Let transactions propagate via block from first epoch
 
 	// Periodic querying simulation
 	wg.Add(numNodes)
@@ -57,7 +58,7 @@ func SimGossip() {
 
 				node.MakeDNSRequest(domain)
 
-				time.Sleep(time.Duration(epochInterval * time.Second))
+				time.Sleep(time.Duration(slotInterval * time.Second))
 			}
 		}(node, i)
 	}

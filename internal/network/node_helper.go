@@ -11,7 +11,7 @@ import (
 )
 
 func (n *Node) AddBlock(block *blockchain.Block) {
-	epoch := (block.Timestamp - n.Config.InitialTimestamp) / n.Config.EpochInterval
+	epoch := (block.Timestamp - n.Config.InitialTimestamp) / (n.Config.SlotInterval * n.Config.SlotsPerEpoch)
 	slotLeader := n.GetSlotLeader(epoch)
 
 	// Verify received block
@@ -44,7 +44,6 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 	n.Blockchain.AddBlock(block)
 }
 
-
 func (n *Node) AddTransaction(tx *blockchain.Transaction) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
@@ -75,66 +74,90 @@ func (n *Node) GetSlotLeader(epoch int64) []byte {
 	return slotLeader
 }
 
-func (n *Node) CreateBlockIfLeader(epochInterval int64) {
-	ticker := time.NewTicker(time.Duration(epochInterval) * time.Second)
+func (n *Node) CreateBlockIfLeader() {
+	ticker := time.NewTicker(time.Duration(n.Config.SlotInterval) * time.Second)
 	defer ticker.Stop()
-	epoch := int64(-1) // Initialize epoch counter
 
+	// GENESIS BLOCK creation
+	currSlotLeader := n.RegistryKeys[0] // Default genesis slot leader
+
+	if bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
+		fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
+
+		seedBytes := []byte(fmt.Sprintf("%f", n.Config.Seed))
+		genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)
+
+		n.BcMutex.Lock()
+		n.Blockchain.AddBlock(genesisBlock)
+		n.BcMutex.Unlock()
+
+		n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock)
+		fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
+	}
+	n.BroadcastRandomNumber(1, n.RegistryKeys) // Broadcast nums for the fist epoch
+	time.Sleep(time.Duration(n.Config.SlotInterval * n.Config.SlotsPerEpoch) * time.Second) // wait till end of epoch
+
+	// Initialize loop variables
+	slot := int64(n.Config.SlotsPerEpoch - 1)
+	epoch := int64(0)
+	blockTxLimit := 10
+
+	// Ticker loop for slots
 	for range ticker.C {
-		epoch++
-		if epoch == 0 {
-			currSlotLeader := n.RegistryKeys[0] // Default genesis slot leader
-
-			if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
-				continue
-			}
-
-			fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
-
-			seedBytes := []byte(fmt.Sprintf("%f", n.Config.Seed))
-			genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)			
-			n.BcMutex.Lock()
-			n.Blockchain.AddBlock(genesisBlock)
-			n.BcMutex.Unlock()
-
-			n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock)
-			fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
-		} else {
-			currSlotLeader := n.GetSlotLeader(epoch)
-
-			if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
-				continue
-			}
-
-			// Create block from transactions
-			fmt.Printf("Node %s is the slot leader, creating a block...\n", n.Address)
-
-			// Get transactions from the pool
-			n.TxMutex.Lock()
-			var transactions []blockchain.Transaction
-			for _, tx := range n.TransactionPool {
-				transactions = append(transactions, *tx)
-			}
-			n.TransactionPool = make(map[int]*blockchain.Transaction) // Clear pool
-			n.TxMutex.Unlock()
-
-			if len(transactions) == 0 {
-				fmt.Println("No transactions to add. Skipping block creation.")
-				continue
-			}
-
-			fmt.Println("Transactions in block:", len(transactions))
-
-			n.BcMutex.Lock()
-			latestBlock := n.Blockchain.GetLatestBlock()
-			newBlock := blockchain.NewBlock(latestBlock.Index+1, currSlotLeader, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
-			n.Blockchain.AddBlock(newBlock)
-			n.BcMutex.Unlock()
-
-			n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
-			fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
+		slot++
+		newEpoch := slot / n.Config.SlotsPerEpoch
+		
+		// Update epoch and leader only when the epoch changes
+		if newEpoch != epoch {
+			epoch = newEpoch
+			currSlotLeader = n.GetSlotLeader(epoch)
+			n.BroadcastRandomNumber(epoch+1, n.RegistryKeys) // Send rand nums for next epoch
 		}
 
-		n.BroadcastRandomNumber(epoch + 1, n.RegistryKeys) // Send the rand nums to be used for next epoch
+		// Only the current slot leader should produce a block
+		if !bytes.Equal(currSlotLeader, n.KeyPair.PublicKey) {
+			continue
+		}
+
+		// Create block from transactions
+		fmt.Printf("Node %s is the slot leader, creating a block...\n", n.Address)
+
+		transactions := n.ChooseTxFromPool(blockTxLimit)
+
+		if len(transactions) == 0 {
+			fmt.Println("No transactions to add. Skipping block creation.")
+			continue
+		}
+
+		fmt.Println("Transactions in block:", len(transactions))
+
+		n.BcMutex.Lock()
+		latestBlock := n.Blockchain.GetLatestBlock()
+		newBlock := blockchain.NewBlock(latestBlock.Index+1, currSlotLeader, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
+		n.Blockchain.AddBlock(newBlock)
+		n.BcMutex.Unlock()
+
+		n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
+		fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 	}
+}
+
+func (n *Node) ChooseTxFromPool(limit int) []blockchain.Transaction {
+	n.TxMutex.Lock()
+	defer n.TxMutex.Unlock()
+
+	if len(n.TransactionPool) == 0 {
+		return nil
+	}
+
+	transactions := make([]blockchain.Transaction, 0, limit)
+	for _, tx := range n.TransactionPool {
+		if len(transactions) >= limit {
+			break
+		}
+		transactions = append(transactions, *tx)
+		delete(n.TransactionPool, tx.TID)
+	}
+
+	return transactions
 }

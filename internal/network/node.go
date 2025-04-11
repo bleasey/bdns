@@ -38,7 +38,8 @@ type Node struct {
 // Node Config
 type NodeConfig struct {
 	InitialTimestamp int64
-	EpochInterval    int64
+	SlotInterval     int64
+	SlotsPerEpoch    int64
 	Seed             float64
 }
 
@@ -209,10 +210,6 @@ func (n *Node) DNSResponseHandler(res BDNSResponse) {
 func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
 	n.RandomMutex.Lock()
 	defer n.RandomMutex.Unlock()
-	
-	if n.EpochRandoms == nil {
-		n.EpochRandoms = make(map[int64]map[string]consensus.SecretValues)
-	}
 
 	if n.EpochRandoms[epoch] == nil {
         n.EpochRandoms[epoch] = make(map[string]consensus.SecretValues)
