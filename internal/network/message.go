@@ -15,10 +15,10 @@ const (
 	MsgPeerRequest   MessageType = "PEER_REQUEST"
 	MsgPeerResponse  MessageType = "PEER_RESPONSE"
 	MsgRandomNumber  MessageType = "RANDOM_NUMBER"
-	MsgInv			 MessageType = "INV"
-	MsgGetBlock		 MessageType = "GET_BLOCK"
-	MsgGetData		 MessageType = "GET_DATA"
-	MsgGetMerkle	 MessageType = "GET_MERKLE"
+	MsgInv           MessageType = "INV"
+	MsgGetBlock      MessageType = "GET_BLOCK"
+	MsgGetData       MessageType = "GET_DATA"
+	MsgGetMerkle     MessageType = "GET_MERKLE"
 )
 
 // Message represents a generic network message

@@ -10,7 +10,7 @@ import (
 	"github.com/bleasey/bdns/internal/blockchain"
 )
 
-func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
+func InitializeP2PNodes(numNodes int, slotInterval int, slotsPerEpoch int, seed int) []*Node {
 	ctx := context.Background()
 	nodes := make([]*Node, numNodes)
 	registryKeys := make([][]byte, numNodes)
@@ -22,7 +22,7 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 		port := 4001 + i
 		addr := fmt.Sprintf("/ip4/127.0.0.1/tcp/%d", port)
 		isFull := i != 1 //  Only node 0 is light node
-		node, err := NewNode(ctx, addr, topicName,isFull)
+		node, err := NewNode(ctx, addr, topicName, isFull)
 		if err != nil {
 			log.Fatalf("Error creating node on port %d: %v", port, err)
 		}
@@ -54,7 +54,7 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 
 	// Initialize nodes given registryKeys and params
 	for i := 0; i < numNodes; i++ {
-		nodes[i].InitializeNodeAsync(strconv.Itoa(i), registryKeys, currTimestamp, int64(epochInterval), float64(seed))
+		go nodes[i].InitializeNodeAsync(strconv.Itoa(i), registryKeys, currTimestamp, int64(slotInterval), int64(slotsPerEpoch), float64(seed))
 	}
 
 	time.Sleep(2 * time.Second) // Let the network stabilize
@@ -77,14 +77,18 @@ func InitializeP2PNodes(numNodes int, epochInterval int, seed int) []*Node {
 	return nodes
 }
 
-func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initialTimestamp int64, epochInterval int64, seed float64) {
+func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initialTimestamp int64, slotInterval int64, slotsPerEpoch int64, seed float64) {
+	initialWaitTime := int64(5) // wait for initial stability (in secs)
 	n.RegistryKeys = registryKeys
 	n.Blockchain = blockchain.CreateBlockchain(chainID)
-	n.Config.InitialTimestamp = initialTimestamp + epochInterval // First block is created 'epoch' secs after initialization
-	n.Config.EpochInterval = epochInterval
+	n.Config.InitialTimestamp = initialTimestamp + initialWaitTime
+	n.Config.SlotInterval = slotInterval
+	n.Config.SlotsPerEpoch = slotsPerEpoch
 	n.Config.Seed = seed
+
 	fmt.Printf("Node %s initialized with chain ID %s\n", n.Address, chainID)
-	go n.CreateBlockIfLeader(epochInterval)
+	time.Sleep(time.Duration(initialWaitTime) * time.Second) // wait till end of epoch
+	n.CreateBlockIfLeader()
 }
 
 func NodesCleanup(nodes []*Node) {
