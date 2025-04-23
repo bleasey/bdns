@@ -35,7 +35,7 @@ func SimpleSim() {
 	}
 
 	fmt.Printf("Waiting for end of epoch for block creation....\n\n")
-	time.Sleep(slotInterval * time.Second) // Let transactions propagate via block from first epoch
+	time.Sleep(slotInterval * slotsPerEpoch * time.Second) // Let transactions propagate via block from first epoch
 
 	// Periodic querying simulation
 	wg.Add(numNodes)
