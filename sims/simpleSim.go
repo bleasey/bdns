@@ -8,6 +8,7 @@ import (
 
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/network"
+	// "github.com/bleasey/bdns/internal/metrics"
 )
 
 func SimpleSim() {
@@ -15,7 +16,7 @@ func SimpleSim() {
 	const numNodes = 6
 	const slotInterval = 5
 	const slotsPerEpoch = 2
-	const seed = 0
+	const seed = 0	
 	var wg sync.WaitGroup
 
 	nodes := network.InitializeP2PNodes(numNodes, slotInterval, slotsPerEpoch, seed)
@@ -56,13 +57,12 @@ func SimpleSim() {
 				domain := fmt.Sprintf("node%d.com", queryNode+1)
 				fmt.Printf("Node %d querying %s\n", id+1, domain)
 
-				node.MakeDNSRequest(domain)
+				// node.MakeDNSRequest(domain)
 
 				time.Sleep(time.Duration(slotInterval * time.Second))
 			}
 		}(node, i)
 	}
-
 	wg.Wait()                   // Wait for queries to complete
 	network.NodesCleanup(nodes) // Cleanup chaindata directory
 }

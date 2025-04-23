@@ -20,21 +20,13 @@ type Blockchain struct {
 // CreateBlockchain creates a new blockchain DB
 func CreateBlockchain(chainID string) *Blockchain {
 	dir := "chaindata"
+
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		log.Fatalf("Failed to create directory %s: %v", dir, err)
 	}
 
 	dbFile := fmt.Sprintf(dbFile, chainID)
-	if dbExists(dbFile) {
-		if err := os.RemoveAll(dir); err != nil {
-			log.Fatalf("Failed to remove directory %s: %v", dir, err)
-		}
-	}
-
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		log.Fatalf("Failed to create directory %s: %v", dir, err)
-	}
-
+	
 	var tip []byte
 
 	db, err := bolt.Open(dbFile, 0600, nil)

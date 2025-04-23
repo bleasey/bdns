@@ -50,7 +50,7 @@ func (n *Node) CreateBlockIfLeader() {
 		n.Blockchain.AddBlock(genesisBlock)
 		n.BcMutex.Unlock()
 
-		n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock)
+		n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock, nil)
 		fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
 	}
 	n.BroadcastRandomNumber(1)                                            // Broadcast nums for the fist epoch
@@ -96,7 +96,7 @@ func (n *Node) CreateBlockIfLeader() {
 		n.Blockchain.AddBlock(newBlock)
 		n.BcMutex.Unlock()
 
-		n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
+		n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock, nil)
 		fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 	}
 }

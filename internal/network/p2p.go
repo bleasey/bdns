@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/bleasey/bdns/internal/metrics"
 )
 
 // P2PNetwork struct manages libp2p host and pubsub
@@ -26,6 +27,7 @@ type GossipMessage struct {
 	Type    MessageType
 	Sender  string // Peer ID
 	Content json.RawMessage
+	Metrics *metrics.DNSMetrics
 }
 
 // NewP2PNetwork initializes a libp2p node with pubsub gossip
@@ -91,12 +93,13 @@ func (p *P2PNetwork) ListenForGossip() {
 }
 
 // BroadcastMessage publishes a message to the gossip network
-func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}) {
+func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}, metrics *metrics.DNSMetrics) {
 	data, _ := json.Marshal(content)
 	gossipMsg := GossipMessage{
 		Type:    msgType,
 		Sender:  p.Host.ID().String(),
 		Content: data,
+		Metrics: metrics,
 	}
 
 	msgData, _ := json.Marshal(gossipMsg)

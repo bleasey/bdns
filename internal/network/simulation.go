@@ -74,13 +74,29 @@ func InitializeP2PNodes(numNodes int, slotInterval int, slotsPerEpoch int, seed 
 	for _, node := range nodes {
 		node.KnownFullPeers = fullPeerIDs
 	}
+
+	for i, node := range nodes {
+		if node.IsFullNode {
+			port := fmt.Sprintf("%d", 6300+i)
+			go StartDNSServer(port, node)
+			fmt.Printf(" DNS Server started on Node %d (%s) at UDP :%s\n", i+1, node.Address, port)
+		}
+	}
 	return nodes
 }
 
 func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initialTimestamp int64, slotInterval int64, slotsPerEpoch int64, seed float64) {
 	initialWaitTime := int64(5) // wait for initial stability (in secs)
 	n.RegistryKeys = registryKeys
+
+	// Initialize blockchain first
+	n.BcMutex.Lock()
 	n.Blockchain = blockchain.CreateBlockchain(chainID)
+	n.BcMutex.Unlock()
+
+	// Wait for blockchain to be ready
+	time.Sleep(1 * time.Second)
+
 	n.Config.InitialTimestamp = initialTimestamp + initialWaitTime
 	n.Config.SlotInterval = slotInterval
 	n.Config.SlotsPerEpoch = slotsPerEpoch
@@ -88,6 +104,13 @@ func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initia
 
 	fmt.Printf("Node %s initialized with chain ID %s\n", n.Address, chainID)
 	time.Sleep(time.Duration(initialWaitTime) * time.Second) // wait till end of epoch
+
+	// Add error handling for blockchain operations
+	if n.Blockchain == nil {
+		log.Printf("Error: Blockchain not initialized for node %s\n", n.Address)
+		return
+	}
+
 	n.CreateBlockIfLeader()
 }
 
