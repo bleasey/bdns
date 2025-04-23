@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"log"
 
 	"github.com/bleasey/bdns/internal/blockchain"
@@ -19,6 +20,7 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 
 	// Update index tree
 	n.TxMutex.Lock()
+	activationEpoch := epoch + n.Config.RegistryUpdateAfter
 	for _, tx := range block.Transactions {
 		switch tx.Type {
 		case blockchain.REGISTER:
@@ -29,6 +31,20 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 
 		case blockchain.REVOKE:
 			n.IndexManager.Remove(tx.DomainName)
+
+		default:
+			// For registry operations
+			if (tx.Type == blockchain.REGISTRY_UPDATE || tx.Type == blockchain.REGISTRY_REVOKE) &&
+				!bytes.Equal(tx.TargetKey, tx.OwnerKey) {
+				log.Printf("Invalid registry operation from %s at %s\n", n.Address, tx.TargetKey)
+				continue
+			}
+
+			n.RegistryOps[activationEpoch] = append(n.RegistryOps[activationEpoch], RegistryOp{
+				OP: tx.Type,
+				Key: tx.TargetKey,
+				UpdatedKey: tx.UpdatedKey,
+			})
 		}
 	}
 	blockchain.RemoveTxsFromPool(block.Transactions, n.TransactionPool)
@@ -44,6 +60,39 @@ func (n *Node) AddTransaction(tx *blockchain.Transaction) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
 	n.TransactionPool[tx.TID] = tx
+}
+
+func (n *Node) UpdateRegistries(epoch int64) {
+	n.RegistryMutex.Lock()
+	defer n.RegistryMutex.Unlock()
+
+	registryOps, exists := n.RegistryOps[epoch]
+	if !exists {
+		return
+	}
+
+	for _, op := range registryOps {
+		switch op.OP {
+		case blockchain.REGISTRY_REGISTER:
+			n.RegistryKeys = append(n.RegistryKeys, op.Key)
+
+		case blockchain.REGISTRY_UPDATE:
+			for i, key := range n.RegistryKeys {
+				if bytes.Equal(op.Key, key) {
+					n.RegistryKeys[i] = op.UpdatedKey
+					break
+				}
+			}
+
+		case blockchain.REGISTRY_REVOKE:
+			for i, key := range n.RegistryKeys {
+				if bytes.Equal(op.Key, key) {
+					n.RegistryKeys = append(n.RegistryKeys[:i], n.RegistryKeys[i+1:]...)
+					break
+				}
+			}
+		}
+	}
 }
 
 // HandleINV processes inventory message and requests missing blocks

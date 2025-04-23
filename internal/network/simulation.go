@@ -85,6 +85,7 @@ func (n *Node) InitializeNodeAsync(chainID string, registryKeys [][]byte, initia
 	n.Config.SlotInterval = slotInterval
 	n.Config.SlotsPerEpoch = slotsPerEpoch
 	n.Config.Seed = seed
+	n.Config.RegistryUpdateAfter = 3 // 3 epochs
 
 	fmt.Printf("Node %s initialized with chain ID %s\n", n.Address, chainID)
 	time.Sleep(time.Duration(initialWaitTime) * time.Second) // wait till end of epoch

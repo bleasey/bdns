@@ -7,4 +7,5 @@ import (
 func main() {
 	// sims.SimpleSim()
 	sims.RandSim()
+	// sims.RegistrySim()
 }

@@ -18,17 +18,22 @@ const (
 	REGISTER TransactionType = iota
 	UPDATE
 	REVOKE
+	REGISTRY_REGISTER
+	REGISTRY_UPDATE
+	REGISTRY_REVOKE
 )
 
 type Transaction struct {
-	TID        int
-	Type       TransactionType
-	Timestamp  int64
-	DomainName string
-	IP         string
-	TTL        int64
-	OwnerKey   []byte
-	Signature  []byte
+	TID        		int
+	Type       		TransactionType
+	Timestamp  		int64
+	DomainName 		string
+	IP         		string
+	TTL        		int64
+	TargetKey  		[]byte // For REGISTRY_OP
+	UpdatedKey 		[]byte // For REGISTRY_OP
+	OwnerKey   		[]byte
+	Signature  		[]byte
 }
 
 func NewTransaction(txType TransactionType, domainName, ip string, ttl int64, ownerKey []byte,
@@ -40,6 +45,27 @@ func NewTransaction(txType TransactionType, domainName, ip string, ttl int64, ow
 		DomainName: domainName,
 		IP:         ip,
 		TTL:        ttl,
+		TargetKey:  nil,
+		UpdatedKey: nil,
+		OwnerKey:   ownerKey,
+		Signature:  nil,
+	}
+
+	tx.Signature = SignTransaction(privateKey, &tx)
+	return &tx
+}
+
+func NewRegistryTransaction(txType TransactionType, targetKey, updatedKey []byte, ownerKey []byte,
+	privateKey *ecdsa.PrivateKey, txPool map[int]*Transaction) *Transaction {
+	tx := Transaction{
+		TID:        GenerateRandomTxID(txPool),
+		Type:       txType,
+		Timestamp:  time.Now().Unix(),
+		DomainName: "",
+		IP:         "",
+		TTL:        0,
+		TargetKey:  targetKey,
+		UpdatedKey: updatedKey,
 		OwnerKey:   ownerKey,
 		Signature:  nil,
 	}
@@ -104,6 +130,8 @@ func (tx *Transaction) SerializeForSigning() []byte {
 	txData = append(txData, []byte(tx.DomainName)...)
 	txData = append(txData, []byte(tx.IP)...)
 	txData = append(txData, IntToByteArr(tx.TTL)...)
+	txData = append(txData, tx.TargetKey...)
+	txData = append(txData, tx.UpdatedKey...)
 	txData = append(txData, tx.OwnerKey...)
 
 	return txData

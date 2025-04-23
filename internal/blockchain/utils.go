@@ -63,6 +63,8 @@ func (t *Transaction) PrintTx() {
 	fmt.Printf("DomainName: %s\n", t.DomainName)
 	fmt.Printf("IP: %s\n", t.IP)
 	fmt.Printf("TTL: %d\n", t.TTL)
+	fmt.Printf("TargetKey: %x\n", t.TargetKey)
+	fmt.Printf("UpdatedKey: %x\n", t.UpdatedKey)
 	fmt.Printf("OwnerKey: %s\n", t.OwnerKey)
 	fmt.Printf("Signature: %d\n\n", t.Signature)
 }

@@ -253,6 +253,9 @@ func ValidateGenesisBlock(block *Block, registryKeys [][]byte, slotLeaderKey []b
 		return false
 	}
 
+	// Assuming registryKeys is unaltered during the genesis block creation
+	// Hence avoiding the use of RegistryMutex
+
 	if len(block.StakeData) != len(registryKeys) {
 		return false
 	}

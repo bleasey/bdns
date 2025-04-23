@@ -23,6 +23,8 @@ type Node struct {
 	P2PNetwork      *P2PNetwork
 	KeyPair         *blockchain.KeyPair
 	RegistryKeys    [][]byte
+	RegistryOps		map[int64][]RegistryOp
+	RegistryMutex   sync.Mutex
 	SlotLeaders     map[int64][]byte // epoch to slot leader
 	SlotMutex       sync.Mutex
 	TransactionPool map[int]*blockchain.Transaction
@@ -40,10 +42,11 @@ type Node struct {
 
 // Node Config
 type NodeConfig struct {
-	InitialTimestamp int64
-	SlotInterval     int64
-	SlotsPerEpoch    int64
-	Seed             float64
+	InitialTimestamp 	int64
+	SlotInterval     	int64
+	SlotsPerEpoch    	int64
+	Seed             	float64
+	RegistryUpdateAfter int64
 }
 
 type RandomNumberMsg struct {
@@ -51,6 +54,12 @@ type RandomNumberMsg struct {
 	SecretValue int    // u_i value
 	RandomValue int    // r_i value
 	Sender      []byte // Registry's public key
+}
+
+type RegistryOp struct {
+	OP 			blockchain.TransactionType
+	Key     	[]byte
+	UpdatedKey	[]byte // in case of updation
 }
 
 // NewNode initializes a blockchain node
@@ -63,7 +72,8 @@ func NewNode(ctx context.Context, addr string, topicName string, isFullNode bool
 	node := &Node{
 		Address:         p2p.Host.Addrs()[0].String(),
 		P2PNetwork:      p2p,
-		KeyPair:         blockchain.NewKeyPair(),
+		KeyPair:      	 blockchain.NewKeyPair(),
+		RegistryOps: 	 make(map[int64][]RegistryOp),
 		SlotLeaders:     make(map[int64][]byte),
 		TransactionPool: make(map[int]*blockchain.Transaction),
 		IndexManager:    index.NewIndexManager(),
@@ -186,7 +196,10 @@ func (n *Node) MakeDNSRequest(domainName string) {
 }
 
 func (n *Node) BroadcastRandomNumber(epoch int64) {
+	n.RegistryMutex.Lock()
 	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
+	n.RegistryMutex.Unlock()
+	
 	nodeSecretValues := secretValues[hex.EncodeToString(n.KeyPair.PublicKey)]
 
 	msg := RandomNumberMsg{

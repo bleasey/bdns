@@ -26,7 +26,11 @@ func (n *Node) GetSlotLeader(epoch int64) []byte {
 		latestBlock := n.Blockchain.GetLatestBlock()
 		n.BcMutex.Unlock()
 
+		n.UpdateRegistries(epoch) // Registry Updates
+
+		n.RegistryMutex.Lock()
 		slotLeader = consensus.GetSlotLeaderUtil(n.RegistryKeys, latestBlock.StakeData, n.EpochRandoms[epoch])
+		n.RegistryMutex.Unlock()
 	}
 
 	n.SlotLeaders[epoch] = slotLeader
@@ -44,7 +48,10 @@ func (n *Node) CreateBlockIfLeader() {
 		fmt.Println("Node", n.Address, "is the slot leader for the genesis block")
 
 		seedBytes := []byte(fmt.Sprintf("%f", n.Config.Seed))
+
+		n.RegistryMutex.Lock()
 		genesisBlock := blockchain.NewGenesisBlock(currSlotLeader, &n.KeyPair.PrivateKey, n.RegistryKeys, seedBytes)
+		n.RegistryMutex.Unlock()
 
 		n.BcMutex.Lock()
 		n.Blockchain.AddBlock(genesisBlock)
