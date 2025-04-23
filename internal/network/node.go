@@ -175,7 +175,6 @@ func (n *Node) ListenForDirectMessages() {
 	})
 }
 
-// BroadcastTransaction sends a new transaction to peers
 func (n *Node) BroadcastTransaction(tx blockchain.Transaction) {
 	n.AddTransaction(&tx)
 	n.P2PNetwork.BroadcastMessage(MsgTransaction, tx)

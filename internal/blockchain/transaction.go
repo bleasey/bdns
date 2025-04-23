@@ -104,6 +104,7 @@ func (tx *Transaction) SerializeForSigning() []byte {
 	txData = append(txData, []byte(tx.DomainName)...)
 	txData = append(txData, []byte(tx.IP)...)
 	txData = append(txData, IntToByteArr(tx.TTL)...)
+	txData = append(txData, tx.OwnerKey...)
 
 	return txData
 }

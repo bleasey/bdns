@@ -92,10 +92,10 @@ func (n *Node) CreateBlockIfLeader() {
 
 		n.BcMutex.Lock()
 		latestBlock := n.Blockchain.GetLatestBlock()
-		newBlock := blockchain.NewBlock(latestBlock.Index+1, currSlotLeader, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
-		n.Blockchain.AddBlock(newBlock)
 		n.BcMutex.Unlock()
-
+		
+		newBlock := blockchain.NewBlock(latestBlock.Index+1, currSlotLeader, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
+		n.AddBlock(newBlock)
 		n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
 		fmt.Print("Block ", newBlock.Index, " created and broadcasted by node ", n.Address, "\n\n")
 	}
