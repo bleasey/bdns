@@ -74,6 +74,16 @@ func InitializeP2PNodes(numNodes int, slotInterval int, slotsPerEpoch int, seed 
 	for _, node := range nodes {
 		node.KnownFullPeers = fullPeerIDs
 	}
+
+	// Optionally: Start DNS Server on all full nodes
+	for i, node := range nodes {
+		if node.IsFullNode {
+			port := fmt.Sprintf("%d", 5300+i)
+			go StartDNSServer(port, node)
+			fmt.Printf(" DNS Server started on Node %d (%s) at UDP :%s\n", i+1, node.Address, port)
+		}
+	}
+
 	return nodes
 }
 

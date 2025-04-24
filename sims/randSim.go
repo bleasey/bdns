@@ -8,6 +8,7 @@ import (
 
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/network"
+	"github.com/bleasey/bdns/client"
 )
 
 func RandSim() {
@@ -63,6 +64,9 @@ func RandSim() {
 		}(node, i)
 	}
 
+
 	wg.Wait()
+	time.Sleep(10 * time.Second) // wait until nodes are ready
+    client.RunAutoClient(domains)
 	network.NodesCleanup(nodes)
 }

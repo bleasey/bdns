@@ -1,7 +1,7 @@
 package network
 
 import (
-	"encoding/hex"
+	//"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -21,7 +21,7 @@ func StartDNSServer(port string, node *Node) {
 	}
 	defer conn.Close()
 
-	log.Printf("BDNS Server started on port %s...\n", port)
+	//log.Printf("BDNS Server started on port %s...\n", port)
 
 	buffer := make([]byte, 512)
 	for {
@@ -31,7 +31,7 @@ func StartDNSServer(port string, node *Node) {
 			continue
 		}
 
-		query := hex.EncodeToString(buffer[:n])
+		query := string(buffer[:n])
 		log.Printf("Received query: %s", query)
 
 		response, err := ResolveDomain(query, node)

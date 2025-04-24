@@ -181,6 +181,10 @@ func (n *Node) BroadcastTransaction(tx blockchain.Transaction) {
 }
 
 func (n *Node) MakeDNSRequest(domainName string) {
+	if ip, found := GetFromCache(domainName); found {
+		fmt.Printf("[CACHE HIT] %s -> %s\n", domainName, ip)
+		return
+	}
 	req := BDNSRequest{DomainName: domainName}
 	n.P2PNetwork.BroadcastMessage(DNSRequest, req)
 }
@@ -233,6 +237,7 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
 
 func (n *Node) DNSResponseHandler(res BDNSResponse) {
 	fmt.Println("DNS Response with Full node received at ", n.Address, " -> ", res.DomainName, " IP:", res.IP)
+	SetToCache(res.DomainName, res.IP)
 }
 
 func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
