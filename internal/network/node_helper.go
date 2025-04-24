@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"encoding/hex"
 	"log"
 
 	"github.com/bleasey/bdns/internal/blockchain"
@@ -34,10 +35,33 @@ func (n *Node) AddBlock(block *blockchain.Block) {
 
 		default:
 			// For registry operations
-			if (tx.Type == blockchain.REGISTRY_UPDATE || tx.Type == blockchain.REGISTRY_REVOKE) &&
+
+			// REGISTRY_UPDATE & REGISTRY_SELF_REVOKE should be from the owner
+			if (tx.Type == blockchain.REGISTRY_UPDATE || tx.Type == blockchain.REGISTRY_SELF_REVOKE) &&
 				!bytes.Equal(tx.TargetKey, tx.OwnerKey) {
 				log.Printf("Invalid registry operation from %s at %s\n", n.Address, tx.TargetKey)
 				continue
+			}
+
+			if (tx.Type == blockchain.REGISTRY_FORCE_REVOKE) {
+				// Check if the sender is a slot leader
+				if !bytes.Equal(tx.TargetKey, slotLeader) {
+					log.Printf("Invalid registry operation from %s at %s\n", n.Address, tx.TargetKey)
+					continue
+				}
+
+				// Check if revocation is valid
+				n.VoteMutex.Lock()
+				voteEpoch := (epoch / n.Config.EpochsPerVote) - 1 // Vote in prev VoteEpoch
+				voteCount := n.VoteCount[voteEpoch][hex.EncodeToString(tx.TargetKey)]
+				n.VoteMutex.Unlock()
+				
+				voteCuttoff := int64(n.Config.VoteRevokeCuttoff * float32(len(n.RegistryKeys)))
+
+				if voteCount < voteCuttoff {
+					log.Printf("Invalid registry operation from %s at %s\n", n.Address, tx.TargetKey)
+					continue
+				}
 			}
 
 			n.RegistryOps[activationEpoch] = append(n.RegistryOps[activationEpoch], RegistryOp{
@@ -84,7 +108,8 @@ func (n *Node) UpdateRegistries(epoch int64) {
 				}
 			}
 
-		case blockchain.REGISTRY_REVOKE:
+		default:
+			// REGISTRY_SELF_REVOKE, REGISTRY_FORCE_REVOKE
 			for i, key := range n.RegistryKeys {
 				if bytes.Equal(op.Key, key) {
 					n.RegistryKeys = append(n.RegistryKeys[:i], n.RegistryKeys[i+1:]...)

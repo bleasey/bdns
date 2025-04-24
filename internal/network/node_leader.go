@@ -60,24 +60,24 @@ func (n *Node) CreateBlockIfLeader() {
 		n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock)
 		fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
 	}
-	n.BroadcastRandomNumber(1)                                            // Broadcast nums for the fist epoch
+	n.BroadcastRandomNumber(1)                                                            // Broadcast nums for the fist epoch
 	time.Sleep(time.Duration(n.Config.SlotInterval*n.Config.SlotsPerEpoch) * time.Second) // wait till end of epoch
 
 	// Initialize loop variables
 	slot := int64(n.Config.SlotsPerEpoch - 1)
 	epoch := int64(0)
-	blockTxLimit := 10
 
 	// Ticker loop for slots
 	for range ticker.C {
 		slot++
 		newEpoch := slot / n.Config.SlotsPerEpoch
+		voteAtCurrentEpoch := (slot % n.Config.SlotsPerEpoch) == 0 && (newEpoch % n.Config.EpochsPerVote) == 0
 
 		// Update epoch and leader only when the epoch changes
 		if newEpoch != epoch {
 			epoch = newEpoch
 			currSlotLeader = n.GetSlotLeader(epoch)
-			n.BroadcastRandomNumber(epoch+1) // Send rand nums for next epoch
+			n.BroadcastRandomNumber(epoch + 1) // Send rand nums for next epoch
 		}
 
 		// Only the current slot leader should produce a block
@@ -85,10 +85,17 @@ func (n *Node) CreateBlockIfLeader() {
 			continue
 		}
 
+		transactions := make([]blockchain.Transaction, 0, n.Config.BlockTxLimit)
+
+		// Check if voting is done at current epoch
+		if voteAtCurrentEpoch {
+			transactions = n.CheckVotes(epoch, transactions)
+		}
+
 		// Create block from transactions
 		fmt.Printf("Node %s is the slot leader, creating a block...\n", n.Address)
 
-		transactions := n.ChooseTxFromPool(blockTxLimit)
+		transactions = n.ChooseTxFromPool(int(n.Config.BlockTxLimit), transactions)
 
 		if len(transactions) == 0 {
 			fmt.Println("No transactions to add. Skipping block creation.")
@@ -100,7 +107,7 @@ func (n *Node) CreateBlockIfLeader() {
 		n.BcMutex.Lock()
 		latestBlock := n.Blockchain.GetLatestBlock()
 		n.BcMutex.Unlock()
-		
+
 		newBlock := blockchain.NewBlock(latestBlock.Index+1, currSlotLeader, nil, transactions, latestBlock.Hash, latestBlock.StakeData, &n.KeyPair.PrivateKey)
 		n.AddBlock(newBlock)
 		n.P2PNetwork.BroadcastMessage(MsgBlock, *newBlock)
@@ -108,15 +115,14 @@ func (n *Node) CreateBlockIfLeader() {
 	}
 }
 
-func (n *Node) ChooseTxFromPool(limit int) []blockchain.Transaction {
+func (n *Node) ChooseTxFromPool(limit int, transactions []blockchain.Transaction) []blockchain.Transaction {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
 
 	if len(n.TransactionPool) == 0 {
-		return nil
+		return transactions
 	}
 
-	transactions := make([]blockchain.Transaction, 0, limit)
 	for _, tx := range n.TransactionPool {
 		if len(transactions) >= limit {
 			break

@@ -19,6 +19,7 @@ const (
 	MsgGetBlock      MessageType = "GET_BLOCK"
 	MsgGetData       MessageType = "GET_DATA"
 	MsgGetMerkle     MessageType = "GET_MERKLE"
+	RegistryVoteKick MessageType = "VOTE_KICK"
 )
 
 // Message represents a generic network message

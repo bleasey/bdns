@@ -38,15 +38,21 @@ type Node struct {
 	IsFullNode      bool // full vs light node
 	PeerID          string
 	KnownFullPeers  []string
+	VoteCount       map[int64]map[string]int64 // VoteCount[VoteEpoch][registryKey] for registry-revoke voting
+	HasVoted        map[int64]map[string]map[string]bool // HasVoted[VoteEpoch][votedKey][voteFor]
+	VoteMutex       sync.Mutex
 }
 
 // Node Config
 type NodeConfig struct {
-	InitialTimestamp 	int64
-	SlotInterval     	int64
-	SlotsPerEpoch    	int64
-	Seed             	float64
+	InitialTimestamp    int64
+	SlotInterval        int64
+	SlotsPerEpoch       int64
+	EpochsPerVote       int64   // Epochs after which registry-revoke voting will take place
+	VoteRevokeCuttoff   float32 // Cutoff for voting (fraction of registries)
+	Seed                float64
 	RegistryUpdateAfter int64
+	BlockTxLimit 		int64
 }
 
 type RandomNumberMsg struct {
@@ -82,6 +88,7 @@ func NewNode(ctx context.Context, addr string, topicName string, isFullNode bool
 		IsFullNode:      isFullNode,
 		PeerID:          p2p.Host.ID().String(),
 		KnownFullPeers:  []string{},
+		HasVoted:        make(map[int64]map[string]map[string]bool),
 	}
 
 	go node.ListenForDirectMessages()
@@ -158,6 +165,14 @@ func (n *Node) HandleMsgGivenType(msg GossipMessage) {
 
 	case MsgGetMerkle:
 		n.HandleMerkleRequest(msg.Sender)
+
+	case RegistryVoteKick:
+		var voteMsg RegistryVote
+		err := json.Unmarshal(msg.Content, &voteMsg)
+		if err != nil {
+			log.Println("Failed to unmarshal registry vote kick message:", err)
+		}
+		n.HandleVoteKick(voteMsg)
 	}
 }
 
@@ -199,7 +214,7 @@ func (n *Node) BroadcastRandomNumber(epoch int64) {
 	n.RegistryMutex.Lock()
 	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
 	n.RegistryMutex.Unlock()
-	
+
 	nodeSecretValues := secretValues[hex.EncodeToString(n.KeyPair.PublicKey)]
 
 	msg := RandomNumberMsg{
