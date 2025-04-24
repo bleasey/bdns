@@ -41,6 +41,7 @@ func CommitmentPhase(registryKeys [][]byte) (map[string]string, map[string]Secre
 	return commitments, secretValues
 }
 
+// TODO: let revealedValues be an array
 func RevealPhase(secretValues map[string]SecretValues) map[string]int {
 	revealedValues := make(map[string]int)
 

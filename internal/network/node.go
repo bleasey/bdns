@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -46,7 +47,8 @@ type NodeConfig struct {
 	SlotInterval     	int64
 	SlotsPerEpoch    	int64
 	Seed             	float64
-	RegistryUpdateAfter int64
+	DRGSize         	uint64 // Number of registries participating in DRG per epoch
+	RegistryUpdateAfter int64 // Number of epochs after which registry updates are applied
 }
 
 type RandomNumberMsg struct {
@@ -195,7 +197,11 @@ func (n *Node) MakeDNSRequest(domainName string) {
 	n.P2PNetwork.BroadcastMessage(DNSRequest, req)
 }
 
-func (n *Node) BroadcastRandomNumber(epoch int64) {
+func (n *Node) BroadcastRandomNumIfEligible(epoch int64) {
+	if !n.IsNodeEligibleForDRG(epoch) {
+		return
+	}
+
 	n.RegistryMutex.Lock()
 	_, secretValues := consensus.CommitmentPhase(n.RegistryKeys)
 	n.RegistryMutex.Unlock()
@@ -210,6 +216,23 @@ func (n *Node) BroadcastRandomNumber(epoch int64) {
 	}
 	n.RandomNumberHandler(epoch, hex.EncodeToString(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
 	n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
+	fmt.Println("Broadcasting random number for epoch", epoch, "by node", n.Address)
+}
+
+// Check if node is eligible to send random numbers for current epoch
+func (n *Node) IsNodeEligibleForDRG(epoch int64) bool {
+	n.RegistryMutex.Lock()
+	defer n.RegistryMutex.Unlock()
+	
+	registryLen := len(n.RegistryKeys)
+	for i := 0; i < int(n.Config.DRGSize); i++ {
+		index := (epoch + int64(i)) % int64(registryLen)
+		if bytes.Equal(n.RegistryKeys[index], n.KeyPair.PublicKey) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
@@ -248,6 +271,7 @@ func (n *Node) DNSResponseHandler(res BDNSResponse) {
 	fmt.Println("DNS Response with Full node received at ", n.Address, " -> ", res.DomainName, " IP:", res.IP)
 }
 
+// TODO: index EpochRandoms by epoch % NUM so that limited space is used
 func (n *Node) RandomNumberHandler(epoch int64, sender string, secretValue int, randomValue int) {
 	n.RandomMutex.Lock()
 	defer n.RandomMutex.Unlock()

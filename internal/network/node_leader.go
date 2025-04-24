@@ -60,7 +60,7 @@ func (n *Node) CreateBlockIfLeader() {
 		n.P2PNetwork.BroadcastMessage(MsgBlock, *genesisBlock)
 		fmt.Print("Genesis block created and broadcasted by node ", n.Address, "\n\n")
 	}
-	n.BroadcastRandomNumber(1)                                            // Broadcast nums for the fist epoch
+	n.BroadcastRandomNumIfEligible(1) // Broadcast nums for the fist epoch
 	time.Sleep(time.Duration(n.Config.SlotInterval*n.Config.SlotsPerEpoch) * time.Second) // wait till end of epoch
 
 	// Initialize loop variables
@@ -77,7 +77,7 @@ func (n *Node) CreateBlockIfLeader() {
 		if newEpoch != epoch {
 			epoch = newEpoch
 			currSlotLeader = n.GetSlotLeader(epoch)
-			n.BroadcastRandomNumber(epoch+1) // Send rand nums for next epoch
+			n.BroadcastRandomNumIfEligible(epoch+1) // Send rand nums for next epoch
 		}
 
 		// Only the current slot leader should produce a block
