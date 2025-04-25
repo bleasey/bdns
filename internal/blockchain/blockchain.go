@@ -26,7 +26,7 @@ func CreateBlockchain(chainID string) *Blockchain {
 	}
 
 	dbFile := fmt.Sprintf(dbFile, chainID)
-	
+
 	var tip []byte
 
 	db, err := bolt.Open(dbFile, 0600, nil)

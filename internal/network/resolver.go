@@ -24,7 +24,7 @@ func ResolveDomain(domain string, n *Node) (string, error) {
 
 	// 3. If light node, forward DNS query to peers
 	if !n.IsFullNode {
-		n.MakeDNSRequest(domain)
+		n.MakeDNSRequest(domain, nil)
 		time.Sleep(2 * time.Second)
 
 		n.TxMutex.Lock()

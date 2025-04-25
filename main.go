@@ -1,8 +1,8 @@
 package main
 
 import (
-	"time"
 	"fmt"
+	"time"
 
 	"github.com/bleasey/bdns/sims"
 )
@@ -21,8 +21,8 @@ const (
 
 func main() {
 	// sims.SimpleSim()
+	sims.RandSim(numNodes, txTime, simulationTime, interval, slotInterval, slotsPerEpoch, seed, txProbability, queryProbability)
 	if err := sims.CleanChainData(); err != nil {
 		fmt.Printf("Warning: Error cleaning chaindata: %v\n", err)
 	}
-	sims.RandSim(numNodes, txTime, simulationTime, interval, slotInterval, slotsPerEpoch, seed, txProbability, queryProbability)
 }

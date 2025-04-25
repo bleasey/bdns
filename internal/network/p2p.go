@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/bleasey/bdns/internal/metrics"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-pubsub"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/bleasey/bdns/internal/metrics"
 )
 
 // P2PNetwork struct manages libp2p host and pubsub
@@ -103,7 +103,9 @@ func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}, 
 	}
 
 	msgData, _ := json.Marshal(gossipMsg)
-	p.Topic.Publish(context.Background(), msgData)
+	if err := p.Topic.Publish(context.Background(), msgData); err != nil {
+		log.Printf("failed to publish message: %v", err)
+	}
 }
 
 // DirectMessage sends a message to a specific peer
@@ -128,7 +130,10 @@ func (p *P2PNetwork) DirectMessage(msgType MessageType, content interface{}, pee
 		Content: data,
 	}
 
-	json.NewEncoder(stream).Encode(responseMsg)
+	enc := json.NewEncoder(stream)
+	if err := enc.Encode(responseMsg); err != nil {
+		log.Printf("failed to encode message: %v", err)
+	}
 }
 
 // ConnectToPeer connects to another peer via multiaddress

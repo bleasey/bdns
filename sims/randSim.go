@@ -3,16 +3,16 @@ package sims
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
-	"os"
-	"path/filepath"
 
-	"github.com/bleasey/bdns/internal/blockchain"
-	"github.com/bleasey/bdns/internal/network"
-	"github.com/bleasey/bdns/internal/metrics"
 	"github.com/bleasey/bdns/client"
+	"github.com/bleasey/bdns/internal/blockchain"
+	"github.com/bleasey/bdns/internal/metrics"
+	"github.com/bleasey/bdns/internal/network"
 )
 
 func CleanChainData() error {
@@ -50,22 +50,21 @@ func CleanChainData() error {
 	return nil
 }
 
-func RandSim(numNodes int, txTime time.Duration, simulationTime time.Duration, interval time.Duration, 
-		slotInterval int, slotsPerEpoch int, seed int, txProbability float64, queryProbability float64) {
-
+func RandSim(numNodes int, txTime time.Duration, simulationTime time.Duration, interval time.Duration,
+	slotInterval int, slotsPerEpoch int, seed int, txProbability float64, queryProbability float64) {
 	var wg sync.WaitGroup
 
 	nodes := network.InitializeP2PNodes(numNodes, slotInterval, slotsPerEpoch, seed)
 
-	fmt.Println("Waiting for genesis block to be created...\n")
+	fmt.Println("Waiting for genesis block to be created...")
 	time.Sleep(time.Duration(slotInterval) * time.Second)
 
 	LatencyTimes := make([]time.Duration, 0)
 	domains := make([]string, 0) // list of registered domains
 	txOnlyTime := time.Now().Add(txTime)
 	simStopTime := time.Now().Add(simulationTime)
-	var totalQueries int64 = 0
-	var totalTxns int64 = 0
+	var totalQueries int64
+	var totalTxns int64
 
 	metrics := metrics.GetDNSMetrics()
 
@@ -78,7 +77,7 @@ func RandSim(numNodes int, txTime time.Duration, simulationTime time.Duration, i
 			for time.Now().Before(simStopTime) {
 				// Chance to create transaction
 				if rand.Float64() < txProbability {
-					domain := fmt.Sprintf("tx%d-node%d.com.bdns.", len(domains), id+1)					
+					domain := fmt.Sprintf("tx%d-node%d.com", len(domains), id+1)
 					ip := fmt.Sprintf("10.0.%d.%d", id+1, rand.Intn(255))
 					ttl := int64(3600)
 					tx := blockchain.NewTransaction(blockchain.REGISTER, domain, ip, ttl, node.KeyPair.PublicKey, &node.KeyPair.PrivateKey, node.TransactionPool)
@@ -103,11 +102,11 @@ func RandSim(numNodes int, txTime time.Duration, simulationTime time.Duration, i
 			}
 		}(node, i)
 	}
-	
+
 	wg.Wait()
-  time.Sleep(10 * time.Second) // wait until nodes are ready
-  client.RunAutoClient(domains)
-  
+	time.Sleep(10 * time.Second) // wait until nodes are ready
+	client.RunAutoClient(domains)
+
 	totalTime := 0.0
 
 	for _, latency := range LatencyTimes {
@@ -125,6 +124,12 @@ func RandSim(numNodes int, txTime time.Duration, simulationTime time.Duration, i
 	fmt.Printf("Queries per second: %f\n", QueriesPerSec)
 
 	metrics.PrintMetrics()
-	time.Sleep(5 * time.Second)
 	network.NodesCleanup(nodes)
+
+	if err := CleanChainData(); err != nil {
+		fmt.Printf("Error cleaning chaindata: %v\n", err)
+	}
+
+	fmt.Println("Simulation completed")
+	time.Sleep(5 * time.Second)
 }

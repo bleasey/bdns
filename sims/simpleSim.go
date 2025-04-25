@@ -16,12 +16,12 @@ func SimpleSim() {
 	const numNodes = 6
 	const slotInterval = 5
 	const slotsPerEpoch = 2
-	const seed = 0	
+	const seed = 0
 	var wg sync.WaitGroup
 
 	nodes := network.InitializeP2PNodes(numNodes, slotInterval, slotsPerEpoch, seed)
 
-	fmt.Println("Waiting for genesis block to be created...\n")
+	fmt.Println("Waiting for genesis block to be created...")
 	time.Sleep(time.Duration(slotInterval) * time.Second)
 
 	// Each node registers its own domains
@@ -34,7 +34,7 @@ func SimpleSim() {
 		fmt.Printf("Node %d sent transaction for domain %s\n", i+1, tx.DomainName)
 	}
 
-	fmt.Printf("Waiting for end of epoch for block creation....\n\n")
+	fmt.Printf("Waiting for end of epoch for block creation...")
 	time.Sleep(slotInterval * slotsPerEpoch * time.Second) // Let transactions propagate via block from first epoch
 
 	// Periodic querying simulation

@@ -2,13 +2,14 @@ package network
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"sync"
 	"time"
+
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/consensus"
 	"github.com/bleasey/bdns/internal/index"
