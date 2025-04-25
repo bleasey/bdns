@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/bleasey/bdns/internal/metrics"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-pubsub"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
@@ -26,6 +27,7 @@ type GossipMessage struct {
 	Type    MessageType
 	Sender  string // Peer ID
 	Content json.RawMessage
+	Metrics *metrics.DNSMetrics
 }
 
 // NewP2PNetwork initializes a libp2p node with pubsub gossip
@@ -91,16 +93,19 @@ func (p *P2PNetwork) ListenForGossip() {
 }
 
 // BroadcastMessage publishes a message to the gossip network
-func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}) {
+func (p *P2PNetwork) BroadcastMessage(msgType MessageType, content interface{}, metrics *metrics.DNSMetrics) {
 	data, _ := json.Marshal(content)
 	gossipMsg := GossipMessage{
 		Type:    msgType,
 		Sender:  p.Host.ID().String(),
 		Content: data,
+		Metrics: metrics,
 	}
 
 	msgData, _ := json.Marshal(gossipMsg)
-	p.Topic.Publish(context.Background(), msgData)
+	if err := p.Topic.Publish(context.Background(), msgData); err != nil {
+		log.Printf("failed to publish message: %v", err)
+	}
 }
 
 // DirectMessage sends a message to a specific peer
@@ -125,7 +130,10 @@ func (p *P2PNetwork) DirectMessage(msgType MessageType, content interface{}, pee
 		Content: data,
 	}
 
-	json.NewEncoder(stream).Encode(responseMsg)
+	enc := json.NewEncoder(stream)
+	if err := enc.Encode(responseMsg); err != nil {
+		log.Printf("failed to encode message: %v", err)
+	}
 }
 
 // ConnectToPeer connects to another peer via multiaddress

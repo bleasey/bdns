@@ -2,16 +2,18 @@ package network
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/consensus"
 	"github.com/bleasey/bdns/internal/index"
+	"github.com/bleasey/bdns/internal/metrics"
 	"github.com/libp2p/go-libp2p/core/network"
 )
 
@@ -93,17 +95,20 @@ func (n *Node) GenerateRandomNumber() []byte {
 	return randomBytes
 }
 
-func (n *Node) HandleMsgGivenType(msg GossipMessage) {
+func (n *Node) HandleMsgGivenType(msg GossipMessage, _ *metrics.DNSMetrics) {
 	// This includes messages received from BOTH direct and broadcast mode
 	// since for now there is no difference in handling based on the mode of reception
+	metrics := metrics.GetDNSMetrics()
+
 	switch msg.Type {
 	case DNSRequest:
 		var req BDNSRequest
+		fmt.Println("DNS Request received at ", n.Address, " -> ", req.DomainName)
 		err := json.Unmarshal(msg.Content, &req)
 		if err != nil {
 			log.Println("Failed during unmarshalling")
 		}
-		n.DNSRequestHandler(req, msg.Sender)
+		n.DNSRequestHandler(req, msg.Sender, metrics)
 
 	case DNSResponse:
 		var res BDNSResponse
@@ -154,7 +159,11 @@ func (n *Node) HandleMsgGivenType(msg GossipMessage) {
 // HandleGossip listens for messages from the gossip network
 func (n *Node) HandleGossip() {
 	for msg := range n.P2PNetwork.MsgChan {
-		n.HandleMsgGivenType(msg)
+		if msg.Metrics != nil {
+			n.HandleMsgGivenType(msg, msg.Metrics)
+		} else {
+			n.HandleMsgGivenType(msg, nil)
+		}
 	}
 
 	fmt.Println("Exiting gossip listener for ", n.Address)
@@ -171,22 +180,22 @@ func (n *Node) ListenForDirectMessages() {
 			return
 		}
 
-		n.HandleMsgGivenType(msg)
+		n.HandleMsgGivenType(msg, nil)
 	})
 }
 
 func (n *Node) BroadcastTransaction(tx blockchain.Transaction) {
 	n.AddTransaction(&tx)
-	n.P2PNetwork.BroadcastMessage(MsgTransaction, tx)
+	n.P2PNetwork.BroadcastMessage(MsgTransaction, tx, nil)
 }
 
-func (n *Node) MakeDNSRequest(domainName string) {
+func (n *Node) MakeDNSRequest(domainName string, metrics *metrics.DNSMetrics) {
 	if ip, found := GetFromCache(domainName); found {
 		fmt.Printf("[CACHE HIT] %s -> %s\n", domainName, ip)
 		return
 	}
 	req := BDNSRequest{DomainName: domainName}
-	n.P2PNetwork.BroadcastMessage(DNSRequest, req)
+	n.P2PNetwork.BroadcastMessage(DNSRequest, req, metrics)
 }
 
 func (n *Node) BroadcastRandomNumber(epoch int64) {
@@ -200,10 +209,12 @@ func (n *Node) BroadcastRandomNumber(epoch int64) {
 		Sender:      n.KeyPair.PublicKey,
 	}
 	n.RandomNumberHandler(epoch, hex.EncodeToString(n.KeyPair.PublicKey), nodeSecretValues.SecretValue, nodeSecretValues.RandomValue)
-	n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg)
+	n.P2PNetwork.BroadcastMessage(MsgRandomNumber, msg, nil)
 }
 
-func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
+func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string, metrics *metrics.DNSMetrics) {
+	start := time.Now()
+
 	// If this node is a light node, forward the query to a known full node
 	if !n.IsFullNode {
 		fmt.Println("Light node forwarding DNS query for:", req.DomainName)
@@ -211,6 +222,9 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
 			if peerID != reqSender {
 				n.P2PNetwork.DirectMessage(DNSRequest, req, peerID)
 				fmt.Println(" Light node forwarded query to:", peerID)
+				if metrics != nil {
+					metrics.AddLightNodeForwardedResolution(time.Since(start))
+				}
 				break
 			}
 		}
@@ -221,6 +235,10 @@ func (n *Node) DNSRequestHandler(req BDNSRequest, reqSender string) {
 	n.TxMutex.Lock()
 	defer n.TxMutex.Unlock()
 	tx := n.IndexManager.GetIP(req.DomainName)
+
+	if metrics != nil {
+		metrics.AddFullNodeDirectResolution(time.Since(start))
+	}
 	if tx != nil {
 		res := BDNSResponse{
 			Timestamp:  tx.Timestamp,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bleasey/bdns/internal/blockchain"
+	"github.com/bleasey/bdns/internal/metrics"
 	"github.com/bleasey/bdns/internal/network"
 )
 
@@ -18,9 +19,11 @@ func SimpleSim() {
 	const seed = 0
 	var wg sync.WaitGroup
 
+	metrics := metrics.GetDNSMetrics()
+
 	nodes := network.InitializeP2PNodes(numNodes, slotInterval, slotsPerEpoch, seed)
 
-	fmt.Println("Waiting for genesis block to be created...\n")
+	fmt.Println("Waiting for genesis block to be created...")
 	time.Sleep(time.Duration(slotInterval) * time.Second)
 
 	// Each node registers its own domains
@@ -33,7 +36,7 @@ func SimpleSim() {
 		fmt.Printf("Node %d sent transaction for domain %s\n", i+1, tx.DomainName)
 	}
 
-	fmt.Printf("Waiting for end of epoch for block creation....\n\n")
+	fmt.Printf("Waiting for end of epoch for block creation...")
 	time.Sleep(slotInterval * slotsPerEpoch * time.Second) // Let transactions propagate via block from first epoch
 
 	// Periodic querying simulation
@@ -56,13 +59,12 @@ func SimpleSim() {
 				domain := fmt.Sprintf("node%d.com", queryNode+1)
 				fmt.Printf("Node %d querying %s\n", id+1, domain)
 
-				node.MakeDNSRequest(domain)
+				node.MakeDNSRequest(domain, metrics)
 
 				time.Sleep(time.Duration(slotInterval * time.Second))
 			}
 		}(node, i)
 	}
-
 	wg.Wait()                   // Wait for queries to complete
 	network.NodesCleanup(nodes) // Cleanup chaindata directory
 }

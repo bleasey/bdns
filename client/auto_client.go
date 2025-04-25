@@ -35,7 +35,10 @@ func sendDNSQuery(domain string, port string, wg *sync.WaitGroup) {
 	}
 
 	buffer := make([]byte, 512)
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		log.Printf("Failed to set read deadline: %v", err)
+		return
+	}
 	n, err := conn.Read(buffer)
 	if err != nil {
 		log.Printf("Timeout or error reading response for %s from %s", domain, port)
@@ -47,7 +50,7 @@ func sendDNSQuery(domain string, port string, wg *sync.WaitGroup) {
 
 func RunAutoClient(domains []string) {
 	fmt.Println(" Intitiating client queries:")
-	rand.Seed(time.Now().UnixNano())
+	// No need for rand.Seed as we're using crypto/rand
 	var wg sync.WaitGroup
 
 	numQueries := 10
