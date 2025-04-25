@@ -12,6 +12,7 @@ import (
 	"github.com/bleasey/bdns/internal/blockchain"
 	"github.com/bleasey/bdns/internal/network"
 	"github.com/bleasey/bdns/internal/metrics"
+	"github.com/bleasey/bdns/client"
 )
 
 func CleanChainData() error {
@@ -102,9 +103,11 @@ func RandSim(numNodes int, txTime time.Duration, simulationTime time.Duration, i
 			}
 		}(node, i)
 	}
-
 	
 	wg.Wait()
+  time.Sleep(10 * time.Second) // wait until nodes are ready
+  client.RunAutoClient(domains)
+  
 	totalTime := 0.0
 
 	for _, latency := range LatencyTimes {
